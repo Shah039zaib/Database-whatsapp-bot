@@ -15,9 +15,9 @@ const QRCode = require('qrcode');
 const fs = require('fs');
 const url = require('url');
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // UPSTASH REDIS
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -50,9 +50,9 @@ async function redisDel(key) {
     } catch (e) { return false; }
 }
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // UPSTASH AUTH STATE
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function useUpstashAuthState() {
     const CREDS_KEY = 'wa_creds_v4';
     const KEYS_KEY = 'wa_keys_v4';
@@ -62,9 +62,9 @@ async function useUpstashAuthState() {
         const { initAuthCreds } = require('@whiskeysockets/baileys');
         creds = initAuthCreds();
         await redisSet(CREDS_KEY, creds);
-        console.log('🔑 Fresh credentials!');
+        console.log('ðŸ”‘ Fresh credentials!');
     } else {
-        console.log('✅ Credentials loaded from Upstash!');
+        console.log('âœ… Credentials loaded from Upstash!');
     }
     const state = {
         creds,
@@ -90,9 +90,9 @@ async function useUpstashAuthState() {
     return { state, saveCreds };
 }
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // GOOGLE SHEETS
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function getGoogleToken() {
     try {
         const email = process.env.GOOGLE_CLIENT_EMAIL;
@@ -133,9 +133,9 @@ async function initSheet() {
     } catch (e) {}
 }
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // VOICE TO TEXT
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function voiceToText(audioBuffer) {
     try {
         const FormData = require('form-data');
@@ -151,18 +151,18 @@ async function voiceToText(audioBuffer) {
     } catch (e) { return null; }
 }
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // LANGUAGE DETECTION
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function detectLang(text) {
     if (/[\u0600-\u06FF]/.test(text)) return 'urdu';
     if (/\b(kya|hai|haan|nahi|bhai|yar|chahiye|theek|acha|karo|dedo|batao|kitna|lena|mujhe|yrr|yaar)\b/i.test(text)) return 'roman_urdu';
     return 'english';
 }
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // DATA STORE
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const DATA_KEY = 'bot_data_v4';
 
 function defaultData() {
@@ -188,7 +188,7 @@ function defaultData() {
 
 TUMHARI SERVICE:
 - Product: 100+ Premium Shopify Themes Bundle
-- Price: PKR 999 ONLY — FINAL PRICE — KABHI KAM NAHI HOGI
+- Price: PKR 999 ONLY â€” FINAL PRICE â€” KABHI KAM NAHI HOGI
 - Delivery: 1 hour baad payment approve hone ke
 
 LANGUAGE: Customer ki language follow karo (Urdu/Roman Urdu/English)
@@ -200,8 +200,8 @@ SELLING:
 - ROI: "Ek sale se 999 wapas"
 
 PRICE NEGOTIATION:
-- Discount KABHI NAHI — 999 IRON FINAL
-- "Kam karo" → "Already lowest — ek theme 5000+ ki, 100+ sirf 999"
+- Discount KABHI NAHI â€” 999 IRON FINAL
+- "Kam karo" â†’ "Already lowest â€” ek theme 5000+ ki, 100+ sirf 999"
 
 RULES:
 - Short 3-4 lines
@@ -224,7 +224,7 @@ async function loadData() {
             if (!botData.customers) botData.customers = {};
             if (!botData.broadcasts) botData.broadcasts = [];
         }
-        console.log('✅ Data loaded!');
+        console.log('âœ… Data loaded!');
     } catch (e) { console.log('Load error:', e.message); }
 }
 
@@ -233,9 +233,9 @@ async function saveData() {
     catch (e) { console.log('Save error:', e.message); }
 }
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // BOT STATE
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let currentQR = null;
 let botStatus = 'starting';
 let sockGlobal = null;
@@ -261,10 +261,10 @@ async function parseBody(req) {
     });
 }
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // FETCH EXISTING CHATS FROM WHATSAPP
-// ─────────────────────────────────────────
-// Global store — startBot mein bind hoga
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Global store â€” startBot mein bind hoga
 let globalStore = null;
 
 function processChatsFromStore() {
@@ -295,7 +295,7 @@ function processChatsFromStore() {
         newChats.sort((a, b) => b.lastMessage - a.lastMessage);
         existingChats = newChats;
         chatsLoaded = true;
-        console.log(`✅ ${count} chats processed!`);
+        console.log(`âœ… ${count} chats processed!`);
     } catch (e) {
         console.log('Chat process error:', e.message);
         chatsLoaded = true;
@@ -303,15 +303,15 @@ function processChatsFromStore() {
 }
 
 async function fetchExistingChats(sock) {
-    console.log('📱 Chats sync ho rahi hain...');
+    console.log('ðŸ“± Chats sync ho rahi hain...');
     chatsLoaded = false;
     existingChats = [];
     processChatsFromStore();
 }
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // AI MESSAGE GENERATOR
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function generateBroadcastMessage(offerDetails, customerName, personalized) {
     const models = [
         { p: 'groq', m: 'llama-3.3-70b-versatile' },
@@ -354,14 +354,14 @@ Rules:
             }, { headers, timeout: 15000 });
 
             return res.data.choices[0].message.content.trim();
-        } catch (e) { console.log(`❌ AI gen fail: ${m}`); }
+        } catch (e) { console.log(`âŒ AI gen fail: ${m}`); }
     }
     return offerDetails;
 }
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // SMART BROADCAST
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function runSmartBroadcast(broadcast) {
     if (!sockGlobal) return;
     broadcastRunning = true;
@@ -373,7 +373,7 @@ async function runSmartBroadcast(broadcast) {
     broadcast.failedCount = 0;
     await saveData();
 
-    console.log(`📢 Smart Broadcast: ${targets.length} contacts | personalized:${broadcast.personalized}`);
+    console.log(`ðŸ“¢ Smart Broadcast: ${targets.length} contacts | personalized:${broadcast.personalized}`);
 
     for (const contact of targets) {
         try {
@@ -387,7 +387,7 @@ async function runSmartBroadcast(broadcast) {
             await sockGlobal.sendMessage(contact.jid, { text: message });
             sent++;
             broadcast.sentCount = sent;
-            console.log(`📤 Sent ${sent}/${targets.length} → ${contact.name || contact.number}`);
+            console.log(`ðŸ“¤ Sent ${sent}/${targets.length} â†’ ${contact.name || contact.number}`);
 
             // Delay
             await new Promise(r => setTimeout(r, (broadcast.delaySeconds || 5) * 1000));
@@ -395,7 +395,7 @@ async function runSmartBroadcast(broadcast) {
         } catch (e) {
             failed++;
             broadcast.failedCount = failed;
-            console.log(`❌ Failed: ${contact.number} — ${e.message}`);
+            console.log(`âŒ Failed: ${contact.number} â€” ${e.message}`);
         }
     }
 
@@ -403,29 +403,29 @@ async function runSmartBroadcast(broadcast) {
     broadcast.completedAt = Date.now();
     await saveData();
     broadcastRunning = false;
-    console.log(`✅ Broadcast complete! Sent:${sent} Failed:${failed}`);
+    console.log(`âœ… Broadcast complete! Sent:${sent} Failed:${failed}`);
 }
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // PAYMENT MESSAGE
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function paymentMsg(orderId, product, lang) {
     const p = botData.payment;
-    const det = `━━━━━━━━━━━━━━━━━━━━
-💳 *Payment — PKR ${product.price}*
-📱 EasyPaisa: ${p.easypaisa.number} | ${p.easypaisa.name}
-📱 JazzCash: ${p.jazzcash.number} | ${p.jazzcash.name}
-🏦 Bank: ${p.bank.bankName} | ${p.bank.accountNumber}
+    const det = `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+ðŸ’³ *Payment â€” PKR ${product.price}*
+ðŸ“± EasyPaisa: ${p.easypaisa.number} | ${p.easypaisa.name}
+ðŸ“± JazzCash: ${p.jazzcash.number} | ${p.jazzcash.name}
+ðŸ¦ Bank: ${p.bank.bankName} | ${p.bank.accountNumber}
 ${p.bank.accountName} | ${p.bank.iban}
-━━━━━━━━━━━━━━━━━━━━`;
-    if (lang === 'urdu') return `🛒 *آرڈر #${orderId}*\n\n${det}\n\n✅ اسکرین شاٹ بھیجیں\n⏳ 1 گھنٹے میں ڈلیوری!`;
-    if (lang === 'roman_urdu') return `🛒 *Order #${orderId}*\n\n${det}\n\n✅ Screenshot bhejo\n⏳ 1 ghante mein delivery!`;
-    return `🛒 *Order #${orderId}*\n\n${det}\n\n✅ Send screenshot\n⏳ Delivery in 1 hour!`;
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”`;
+    if (lang === 'urdu') return `ðŸ›’ *Ø¢Ø±ÚˆØ± #${orderId}*\n\n${det}\n\nâœ… Ø§Ø³Ú©Ø±ÛŒÙ† Ø´Ø§Ù¹ Ø¨Ú¾ÛŒØ¬ÛŒÚº\nâ³ 1 Ú¯Ú¾Ù†Ù¹Û’ Ù…ÛŒÚº ÚˆÙ„ÛŒÙˆØ±ÛŒ!`;
+    if (lang === 'roman_urdu') return `ðŸ›’ *Order #${orderId}*\n\n${det}\n\nâœ… Screenshot bhejo\nâ³ 1 ghante mein delivery!`;
+    return `ðŸ›’ *Order #${orderId}*\n\n${det}\n\nâœ… Send screenshot\nâ³ Delivery in 1 hour!`;
 }
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // AI SALES
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function getAI(userMessage, userId, customerName, lang) {
     if (!salesHistory[userId]) salesHistory[userId] = [];
     salesHistory[userId].push({ role: 'user', content: userMessage });
@@ -462,13 +462,13 @@ async function getAI(userMessage, userId, customerName, lang) {
             if (salesHistory[userId].length > 0) salesHistory[userId].pop();
         }
     }
-    const fb = { urdu: '⚠️ تکنیکی مسئلہ — 1 منٹ بعد کوشش کریں! 🙏', roman_urdu: '⚠️ Thodi problem. 1 min baad try karo! 🙏', english: '⚠️ Technical issue. Try in 1 min! 🙏' };
+    const fb = { urdu: 'âš ï¸ ØªÚ©Ù†ÛŒÚ©ÛŒ Ù…Ø³Ø¦Ù„Û â€” 1 Ù…Ù†Ù¹ Ø¨Ø¹Ø¯ Ú©ÙˆØ´Ø´ Ú©Ø±ÛŒÚº! ðŸ™', roman_urdu: 'âš ï¸ Thodi problem. 1 min baad try karo! ðŸ™', english: 'âš ï¸ Technical issue. Try in 1 min! ðŸ™' };
     return { message: fb[lang] || fb.roman_urdu, shouldOrder: false, product };
 }
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // ORDER HANDLER
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function handleOrder(sock, senderId, senderName, aiReply, message, lang) {
     botData.orderCounter++;
     const orderId = botData.orderCounter;
@@ -478,12 +478,12 @@ async function handleOrder(sock, senderId, senderName, aiReply, message, lang) {
     await saveToSheet({ orderId, customerName: senderName, customerNumber: senderId.replace('@s.whatsapp.net', ''), product: product?.name, amount: product?.price, status: 'pending', language: lang });
     if (aiReply.message) { await sock.sendMessage(senderId, { text: aiReply.message }, { quoted: message }); await new Promise(r => setTimeout(r, 1500)); }
     await sock.sendMessage(senderId, { text: paymentMsg(orderId, product, lang) });
-    console.log(`🛒 Order #${orderId} — ${senderName}`);
+    console.log(`ðŸ›’ Order #${orderId} â€” ${senderName}`);
 }
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // WEB SERVER
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const server = http.createServer(async (req, res) => {
     const parsedUrl = url.parse(req.url, true);
     const pathname = parsedUrl.pathname;
@@ -500,7 +500,7 @@ const server = http.createServer(async (req, res) => {
             return;
         }
         res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(`<!DOCTYPE html><html><head><title>Login</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#0f0f0f;color:white;font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;}.box{background:#1a1a1a;padding:40px;border-radius:16px;width:90%;max-width:380px;border:1px solid #333;text-align:center;}h1{color:#25D366;font-size:24px;margin-bottom:8px;}p{color:#aaa;font-size:13px;margin-bottom:25px;}input{width:100%;padding:12px 15px;background:#0f0f0f;border:1px solid #333;border-radius:8px;color:white;font-size:15px;margin-bottom:15px;outline:none;}input:focus{border-color:#25D366;}button{width:100%;padding:12px;background:#25D366;border:none;border-radius:8px;color:black;font-size:16px;font-weight:bold;cursor:pointer;}.err{color:#e74c3c;font-size:13px;margin-top:10px;display:none;}</style></head><body><div class="box"><h1>🏪 Mega Agency</h1><p>Admin Login</p><input type="password" id="p" placeholder="Password" onkeypress="if(event.key==='Enter')login()"/><button onclick="login()">🔐 Login</button><div class="err" id="e">❌ Wrong password!</div></div><script>async function login(){const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('p').value})});const d=await r.json();if(d.success)window.location='/dashboard';else document.getElementById('e').style.display='block';}</script></body></html>`);
+        res.end(`<!DOCTYPE html><html><head><title>Login</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#0f0f0f;color:white;font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;}.box{background:#1a1a1a;padding:40px;border-radius:16px;width:90%;max-width:380px;border:1px solid #333;text-align:center;}h1{color:#25D366;font-size:24px;margin-bottom:8px;}p{color:#aaa;font-size:13px;margin-bottom:25px;}input{width:100%;padding:12px 15px;background:#0f0f0f;border:1px solid #333;border-radius:8px;color:white;font-size:15px;margin-bottom:15px;outline:none;}input:focus{border-color:#25D366;}button{width:100%;padding:12px;background:#25D366;border:none;border-radius:8px;color:black;font-size:16px;font-weight:bold;cursor:pointer;}.err{color:#e74c3c;font-size:13px;margin-top:10px;display:none;}</style></head><body><div class="box"><h1>ðŸª Mega Agency</h1><p>Admin Login</p><input type="password" id="p" placeholder="Password" onkeypress="if(event.key==='Enter')login()"/><button onclick="login()">ðŸ” Login</button><div class="err" id="e">âŒ Wrong password!</div></div><script>async function login(){const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('p').value})});const d=await r.json();if(d.success)window.location='/dashboard';else document.getElementById('e').style.display='block';}</script></body></html>`);
         return;
     }
 
@@ -508,11 +508,11 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/qr') {
         res.writeHead(200, { 'Content-Type': 'text/html' });
-        if (botStatus === 'connected') { res.end(`<html><head><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;}h2{color:#25D366;}a{color:#25D366;font-size:18px;margin-top:20px;display:block;}p{color:#aaa;}</style></head><body><h2>✅ Connected!</h2><p>Mega Agency Live!</p><a href="/dashboard">📊 Dashboard</a></body></html>`); return; }
-        if (!currentQR) { res.end(`<html><head><meta http-equiv="refresh" content="3"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;}h2{color:#f39c12;}p{color:#aaa;}</style></head><body><h2>⏳ QR Ho Raha Hai...</h2><p>Status: ${botStatus}</p></body></html>`); return; }
+        if (botStatus === 'connected') { res.end(`<html><head><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;}h2{color:#25D366;}a{color:#25D366;font-size:18px;margin-top:20px;display:block;}p{color:#aaa;}</style></head><body><h2>âœ… Connected!</h2><p>Mega Agency Live!</p><a href="/dashboard">ðŸ“Š Dashboard</a></body></html>`); return; }
+        if (!currentQR) { res.end(`<html><head><meta http-equiv="refresh" content="3"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;}h2{color:#f39c12;}p{color:#aaa;}</style></head><body><h2>â³ QR Ho Raha Hai...</h2><p>Status: ${botStatus}</p></body></html>`); return; }
         try {
             const qrDataURL = await QRCode.toDataURL(currentQR, { width: 300, margin: 2 });
-            res.end(`<html><head><meta http-equiv="refresh" content="25"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;padding:20px;}h2{color:#25D366;}img{border:8px solid white;border-radius:12px;width:280px;height:280px;}.s{background:#222;padding:15px;border-radius:10px;text-align:left;max-width:320px;margin-top:15px;}p{color:#aaa;}</style></head><body><h2>📱 WhatsApp QR</h2><img src="${qrDataURL}"/><div class="s"><p>1️⃣ WhatsApp kholo</p><p>2️⃣ 3 dots → Linked Devices</p><p>3️⃣ Link a Device</p><p>4️⃣ Scan!</p></div><p style="color:#25D366;margin-top:10px">✅ Ek baar scan — hamesha!</p><p style="color:#f39c12">⚠️ 25 sec mein expire!</p></body></html>`);
+            res.end(`<html><head><meta http-equiv="refresh" content="25"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;padding:20px;}h2{color:#25D366;}img{border:8px solid white;border-radius:12px;width:280px;height:280px;}.s{background:#222;padding:15px;border-radius:10px;text-align:left;max-width:320px;margin-top:15px;}p{color:#aaa;}</style></head><body><h2>ðŸ“± WhatsApp QR</h2><img src="${qrDataURL}"/><div class="s"><p>1ï¸âƒ£ WhatsApp kholo</p><p>2ï¸âƒ£ 3 dots â†’ Linked Devices</p><p>3ï¸âƒ£ Link a Device</p><p>4ï¸âƒ£ Scan!</p></div><p style="color:#25D366;margin-top:10px">âœ… Ek baar scan â€” hamesha!</p><p style="color:#f39c12">âš ï¸ 25 sec mein expire!</p></body></html>`);
         } catch (e) { res.end('<h1>QR Error</h1>'); }
         return;
     }
@@ -600,9 +600,9 @@ const server = http.createServer(async (req, res) => {
             order.status = 'approved'; await saveData();
             const product = botData.products.find(p => p.id === order.productId) || botData.products[0];
             try {
-                let msg = `🎉 *Payment Approved!*\n\nOrder *#${order.orderId}*\n📦 *${product.name}*\n\n`;
-                if (product.downloadLink) msg += `⬇️ *Download:*\n${product.downloadLink}\n\n`;
-                msg += `Shukriya! 🙏`;
+                let msg = `ðŸŽ‰ *Payment Approved!*\n\nOrder *#${order.orderId}*\nðŸ“¦ *${product.name}*\n\n`;
+                if (product.downloadLink) msg += `â¬‡ï¸ *Download:*\n${product.downloadLink}\n\n`;
+                msg += `Shukriya! ðŸ™`;
                 await sockGlobal.sendMessage(order.customerJid, { text: msg });
                 await saveToSheet({ ...order, product: product.name, amount: product.price, status: 'approved' });
             } catch (e) {}
@@ -615,7 +615,7 @@ const server = http.createServer(async (req, res) => {
         const order = Object.values(botData.orders).find(o => o.orderId === orderId);
         if (order && sockGlobal) {
             order.status = 'rejected'; await saveData();
-            try { await sockGlobal.sendMessage(order.customerJid, { text: `❌ Payment verify nahi hui. Dobara screenshot bhejo! 💪` }); await saveToSheet({ ...order, status: 'rejected' }); } catch (e) {}
+            try { await sockGlobal.sendMessage(order.customerJid, { text: `âŒ Payment verify nahi hui. Dobara screenshot bhejo! ðŸ’ª` }); await saveToSheet({ ...order, status: 'rejected' }); } catch (e) {}
         }
         res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
     }
@@ -715,44 +715,44 @@ input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform
 @media(max-width:768px){.sidebar{width:55px;}.sidebar-logo,.nt{display:none;}.nav-item{justify-content:center;padding:12px;}.main{margin-left:55px;padding:12px;}.stats-grid{grid-template-columns:repeat(2,1fr);}}
 </style></head><body>
 <div class="sidebar">
-<div class="sidebar-logo"><h2>🏪 Mega</h2><p>Admin v4</p></div>
-<div class="nav-item active" onclick="showPage('orders',this)"><span>📦</span><span class="nt"> Orders</span></div>
-<div class="nav-item" onclick="showPage('broadcast',this)"><span>📢</span><span class="nt"> Broadcast</span></div>
-<div class="nav-item" onclick="showPage('products',this)"><span>🎨</span><span class="nt"> Products</span></div>
-<div class="nav-item" onclick="showPage('payment',this)"><span>💳</span><span class="nt"> Payment</span></div>
-<div class="nav-item" onclick="showPage('prompt',this)"><span>🤖</span><span class="nt"> AI Prompt</span></div>
-<div class="nav-item" onclick="showPage('settings',this)"><span>⚙️</span><span class="nt"> Settings</span></div>
-<div class="nav-item" onclick="window.open('/qr','_blank')"><span>📱</span><span class="nt"> QR</span></div>
-<div class="nav-item" onclick="window.location='/logout'"><span>🚪</span><span class="nt"> Logout</span></div>
+<div class="sidebar-logo"><h2>ðŸª Mega</h2><p>Admin v4</p></div>
+<div class="nav-item active" id="nav-orders" onclick="showPage('orders')"><span>ðŸ“¦</span><span class="nt"> Orders</span></div>
+<div class="nav-item" id="nav-broadcast" onclick="showPage('broadcast')"><span>ðŸ“¢</span><span class="nt"> Broadcast</span></div>
+<div class="nav-item" id="nav-products" onclick="showPage('products')"><span>ðŸŽ¨</span><span class="nt"> Products</span></div>
+<div class="nav-item" id="nav-payment" onclick="showPage('payment')"><span>ðŸ’³</span><span class="nt"> Payment</span></div>
+<div class="nav-item" id="nav-prompt" onclick="showPage('prompt')"><span>ðŸ¤–</span><span class="nt"> AI Prompt</span></div>
+<div class="nav-item" id="nav-settings" onclick="showPage('settings')"><span>âš™ï¸</span><span class="nt"> Settings</span></div>
+<div class="nav-item" onclick="window.open('/qr','_blank')"><span>ðŸ“±</span><span class="nt"> QR</span></div>
+<div class="nav-item" onclick="window.location='/logout'"><span>ðŸšª</span><span class="nt"> Logout</span></div>
 </div>
 <div class="main">
-<div class="topbar"><h1 id="pt">📦 Orders</h1>
+<div class="topbar"><h1 id="pt">ðŸ“¦ Orders</h1>
 <div style="display:flex;gap:10px;align-items:center;">
-<span class="bot-badge" id="bb">⏳ Loading...</span>
-<button class="btn btn-gray" onclick="loadData()" style="padding:6px 12px;font-size:12px;">🔄</button>
+<span class="bot-badge" id="bb">â³ Loading...</span>
+<button class="btn btn-gray" onclick="loadData()" style="padding:6px 12px;font-size:12px;">ðŸ”„</button>
 </div></div>
 <div class="stats-grid" id="sg"></div>
-<div class="rev-card" id="rc"><p>💰 Total Revenue</p><h2 id="rev">PKR 0</h2><p id="rd">Loading...</p></div>
+<div class="rev-card" id="rc"><p>ðŸ’° Total Revenue</p><h2 id="rev">PKR 0</h2><p id="rd">Loading...</p></div>
 
 <!-- ORDERS -->
 <div class="page active" id="page-orders">
-<div class="section"><div class="section-header"><h3>⏳ Pending</h3></div><div class="section-body" id="pendingOrders"><div class="empty">Loading...</div></div></div>
-<div class="section"><div class="section-header"><h3>✅ Approved</h3></div><div class="section-body" id="approvedOrders"><div class="empty">Loading...</div></div></div>
-<div class="section"><div class="section-header"><h3>❌ Rejected</h3></div><div class="section-body" id="rejectedOrders"><div class="empty">Loading...</div></div></div>
+<div class="section"><div class="section-header"><h3>â³ Pending</h3></div><div class="section-body" id="pendingOrders"><div class="empty">Loading...</div></div></div>
+<div class="section"><div class="section-header"><h3>âœ… Approved</h3></div><div class="section-body" id="approvedOrders"><div class="empty">Loading...</div></div></div>
+<div class="section"><div class="section-header"><h3>âŒ Rejected</h3></div><div class="section-body" id="rejectedOrders"><div class="empty">Loading...</div></div></div>
 </div>
 
 <!-- BROADCAST -->
 <div class="page" id="page-broadcast">
-<div class="section"><div class="section-header"><h3>🤖 AI Message Generator</h3></div><div class="section-body">
-<div class="info-box">✅ AI tumhara offer message generate karega — personalized ya same sab ke liye</div>
+<div class="section"><div class="section-header"><h3>ðŸ¤– AI Message Generator</h3></div><div class="section-body">
+<div class="info-box">âœ… AI tumhara offer message generate karega â€” personalized ya same sab ke liye</div>
 <div class="form-group"><label>Offer Details (AI ko batao kya offer hai)</label>
-<textarea id="offerDetails" rows="3" placeholder="e.g. 100+ Shopify themes bundle sirf PKR 999 mein — limited time offer — buy karo abhi!"></textarea></div>
+<textarea id="offerDetails" rows="3" placeholder="e.g. 100+ Shopify themes bundle sirf PKR 999 mein â€” limited time offer â€” buy karo abhi!"></textarea></div>
 <div class="form-group"><label>Message Type</label>
 <select id="msgType">
-<option value="personalized">🎯 Personalized (har customer ke naam se)</option>
-<option value="same">📋 Same message sab ko</option>
+<option value="personalized">ðŸŽ¯ Personalized (har customer ke naam se)</option>
+<option value="same">ðŸ“‹ Same message sab ko</option>
 </select></div>
-<button class="btn btn-purple" onclick="generateMsg()" id="genBtn">🤖 AI Se Message Generate Karo</button>
+<button class="btn btn-purple" onclick="generateMsg()" id="genBtn">ðŸ¤– AI Se Message Generate Karo</button>
 <div id="generatedMsg" style="display:none;margin-top:15px;">
 <div class="form-group"><label>Generated Message (edit kar sakte ho)</label>
 <textarea id="msgPreview" rows="6"></textarea></div>
@@ -760,10 +760,10 @@ input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform
 </div></div>
 
 <div class="section"><div class="section-header">
-<h3>📱 Contacts Select Karo</h3>
+<h3>ðŸ“± Contacts Select Karo</h3>
 <div style="display:flex;gap:8px;flex-wrap:wrap;">
-<button class="btn btn-green" onclick="selectAll()" id="selAllBtn">✅ Select All</button>
-<button class="btn btn-gray" onclick="deselectAll()">❌ Deselect All</button>
+<button class="btn btn-green" onclick="selectAll()" id="selAllBtn">âœ… Select All</button>
+<button class="btn btn-gray" onclick="deselectAll()">âŒ Deselect All</button>
 <span id="selCount" style="color:#25D366;font-size:13px;align-self:center;"></span>
 </div>
 </div><div class="section-body">
@@ -772,74 +772,74 @@ input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform
 <label>Delay Between Messages (seconds)</label>
 <input type="number" id="bc_delay" value="5" min="1" max="60"/>
 </div>
-<input type="text" id="chatSearch" placeholder="🔍 Contact search karo..." oninput="filterChats()" style="margin-bottom:10px;"/>
+<input type="text" id="chatSearch" placeholder="ðŸ” Contact search karo..." oninput="filterChats()" style="margin-bottom:10px;"/>
 </div>
-<div id="chatStatus" class="loading">⏳ Bot connect hone ke baad contacts load honge...</div>
+<div id="chatStatus" class="loading">â³ Bot connect hone ke baad contacts load honge...</div>
 <div id="chatsList"></div>
 </div></div>
 
-<div class="section"><div class="section-header"><h3>🚀 Send Broadcast</h3></div><div class="section-body">
+<div class="section"><div class="section-header"><h3>ðŸš€ Send Broadcast</h3></div><div class="section-body">
 <div id="bcPreview" style="color:#aaa;font-size:13px;margin-bottom:15px;"></div>
-<button class="btn btn-green" onclick="sendBroadcast()" id="sendBcBtn" style="width:100%;padding:12px;font-size:16px;">📢 Broadcast Bhejo</button>
+<button class="btn btn-green" onclick="sendBroadcast()" id="sendBcBtn" style="width:100%;padding:12px;font-size:16px;">ðŸ“¢ Broadcast Bhejo</button>
 <div id="bcProgress" style="display:none;margin-top:15px;">
 <p style="color:#25D366;font-size:14px;" id="bcProgressText">Sending...</p>
 <div class="progress-bar"><div class="progress-fill" id="bcProgressFill" style="width:0%"></div></div>
 </div>
 </div></div>
 
-<div class="section"><div class="section-header"><h3>📋 Broadcast History</h3></div><div class="section-body" id="bcHistory"><div class="empty">Loading...</div></div></div>
+<div class="section"><div class="section-header"><h3>ðŸ“‹ Broadcast History</h3></div><div class="section-body" id="bcHistory"><div class="empty">Loading...</div></div></div>
 </div>
 
 <!-- PRODUCTS -->
 <div class="page" id="page-products">
-<div class="section"><div class="section-header"><h3>🎨 Products</h3><button class="btn btn-green" onclick="addProduct()">+ Add</button></div>
+<div class="section"><div class="section-header"><h3>ðŸŽ¨ Products</h3><button class="btn btn-green" onclick="addProduct()">+ Add</button></div>
 <div class="section-body" id="prodList"></div></div></div>
 
 <!-- PAYMENT -->
 <div class="page" id="page-payment">
-<div class="section"><div class="section-header"><h3>💳 Payment</h3></div><div class="section-body">
-<h4 style="color:#aaa;margin-bottom:12px">📱 EasyPaisa</h4>
+<div class="section"><div class="section-header"><h3>ðŸ’³ Payment</h3></div><div class="section-body">
+<h4 style="color:#aaa;margin-bottom:12px">ðŸ“± EasyPaisa</h4>
 <div class="form-group"><label>Number</label><input id="ep_n"/></div>
 <div class="form-group"><label>Name</label><input id="ep_nm"/></div>
-<h4 style="color:#aaa;margin:15px 0 12px">📱 JazzCash</h4>
+<h4 style="color:#aaa;margin:15px 0 12px">ðŸ“± JazzCash</h4>
 <div class="form-group"><label>Number</label><input id="jc_n"/></div>
 <div class="form-group"><label>Name</label><input id="jc_nm"/></div>
-<h4 style="color:#aaa;margin:15px 0 12px">🏦 Bank</h4>
+<h4 style="color:#aaa;margin:15px 0 12px">ðŸ¦ Bank</h4>
 <div class="form-group"><label>Bank</label><input id="bk_n"/></div>
 <div class="form-group"><label>Account No</label><input id="bk_a"/></div>
 <div class="form-group"><label>Account Holder</label><input id="bk_h"/></div>
 <div class="form-group"><label>IBAN</label><input id="bk_i"/></div>
-<button class="save-btn" onclick="savePayment()">💾 Save</button>
+<button class="save-btn" onclick="savePayment()">ðŸ’¾ Save</button>
 </div></div></div>
 
 <!-- AI PROMPT -->
 <div class="page" id="page-prompt">
-<div class="section"><div class="section-header"><h3>🤖 AI Prompt</h3></div><div class="section-body">
-<div class="warn-box">⚠️ ORDER_READY word zaroor rakho! Price 999 final rakho!</div>
+<div class="section"><div class="section-header"><h3>ðŸ¤– AI Prompt</h3></div><div class="section-body">
+<div class="warn-box">âš ï¸ ORDER_READY word zaroor rakho! Price 999 final rakho!</div>
 <div class="form-group"><textarea id="aiP" rows="25" style="min-height:450px;font-size:13px;"></textarea></div>
-<button class="save-btn" onclick="savePrompt()">💾 Save</button>
+<button class="save-btn" onclick="savePrompt()">ðŸ’¾ Save</button>
 </div></div></div>
 
 <!-- SETTINGS -->
 <div class="page" id="page-settings">
-<div class="section"><div class="section-header"><h3>⚙️ Settings</h3></div><div class="section-body">
+<div class="section"><div class="section-header"><h3>âš™ï¸ Settings</h3></div><div class="section-body">
 <div class="form-group"><label>Business Name</label><input id="s_bn"/></div>
 <div class="form-group"><label>Admin Number (92XXXXXXXXXX)</label><input id="s_an"/></div>
 <div class="form-group"><label>New Password</label><input id="s_pw" type="password"/></div>
-<button class="save-btn" onclick="saveSettings()">💾 Save</button>
+<button class="save-btn" onclick="saveSettings()">ðŸ’¾ Save</button>
 </div></div>
-<div class="section" style="margin-top:20px"><div class="section-header"><h3>📱 Session</h3></div><div class="section-body">
-<div class="info-box">✅ Session Upstash mein save!</div>
+<div class="section" style="margin-top:20px"><div class="section-header"><h3>ðŸ“± Session</h3></div><div class="section-body">
+<div class="info-box">âœ… Session Upstash mein save!</div>
 <p style="color:#aaa;font-size:13px;margin-bottom:15px">Problem ho toh reset karo.</p>
-<button class="btn btn-red" onclick="resetSess()">🔄 Reset Session</button>
+<button class="btn btn-red" onclick="resetSess()">ðŸ”„ Reset Session</button>
 </div></div></div>
 </div>
 
 <!-- Message Modal -->
 <div class="msg-modal" id="mm">
-<div class="msg-box"><h3>💬 Message</h3><input type="hidden" id="mj"/>
+<div class="msg-box"><h3>ðŸ’¬ Message</h3><input type="hidden" id="mj"/>
 <div class="form-group"><label>Message</label><textarea id="mt" rows="4" placeholder="Message..."></textarea></div>
-<div class="btn-row"><button class="btn btn-green" onclick="sendMsg()">📤 Send</button><button class="btn btn-gray" onclick="closeM()">Cancel</button></div>
+<div class="btn-row"><button class="btn btn-green" onclick="sendMsg()">ðŸ“¤ Send</button><button class="btn btn-gray" onclick="closeM()">Cancel</button></div>
 </div></div>
 <div class="toast" id="toast"></div>
 
@@ -870,13 +870,13 @@ async function loadChats(){
 function renderAll(){
     const b=document.getElementById('bb');
     b.className='bot-badge '+(D.botStatus==='connected'?'badge-live':'badge-off');
-    b.textContent=D.botStatus==='connected'?'🟢 Live':'🔴 '+D.botStatus;
+    b.textContent=D.botStatus==='connected'?'ðŸŸ¢ Live':'ðŸ”´ '+D.botStatus;
     const s=D.stats||{};
     document.getElementById('sg').innerHTML=\`
-    <div class="stat-card" style="border-top:3px solid #f39c12"><h2 style="color:#f39c12">\${s.pending||0}</h2><p>⏳ Pending</p></div>
-    <div class="stat-card" style="border-top:3px solid #25D366"><h2 style="color:#25D366">\${s.approved||0}</h2><p>✅ Approved</p></div>
-    <div class="stat-card" style="border-top:3px solid #e74c3c"><h2 style="color:#e74c3c">\${s.rejected||0}</h2><p>❌ Rejected</p></div>
-    <div class="stat-card" style="border-top:3px solid #3498db"><h2 style="color:#3498db">\${s.existingChats||0}</h2><p>📱 Chats</p></div>\`;
+    <div class="stat-card" style="border-top:3px solid #f39c12"><h2 style="color:#f39c12">\${s.pending||0}</h2><p>â³ Pending</p></div>
+    <div class="stat-card" style="border-top:3px solid #25D366"><h2 style="color:#25D366">\${s.approved||0}</h2><p>âœ… Approved</p></div>
+    <div class="stat-card" style="border-top:3px solid #e74c3c"><h2 style="color:#e74c3c">\${s.rejected||0}</h2><p>âŒ Rejected</p></div>
+    <div class="stat-card" style="border-top:3px solid #3498db"><h2 style="color:#3498db">\${s.existingChats||0}</h2><p>ðŸ“± Chats</p></div>\`;
     document.getElementById('rev').textContent='PKR '+(s.revenue||0).toLocaleString();
     document.getElementById('rd').textContent=(s.approved||0)+' approved';
     renderOrders();renderBcHistory();renderProd();renderPay();renderPrompt();renderSet();
@@ -887,7 +887,7 @@ function renderChats(){
     const cl=document.getElementById('chatsList');
     if(allChats.length===0){
         cs.style.display='block';
-        cs.textContent=D.botStatus==='connected'?'⏳ Chats load ho rahi hain...':'❌ Bot connect karo pehle!';
+        cs.textContent=D.botStatus==='connected'?'â³ Chats load ho rahi hain...':'âŒ Bot connect karo pehle!';
         cl.innerHTML='';
         return;
     }
@@ -895,7 +895,7 @@ function renderChats(){
     updateSelCount();
     cl.innerHTML=filteredChats.map(c=>\`
     <div class="chat-item \${selectedChats.has(c.jid)?'selected':''}" onclick="toggleChat('\${c.jid}','\${(c.name||'').replace(/'/g,'\\\\'')}','\${c.number}')">
-    <div class="chat-avatar">👤</div>
+    <div class="chat-avatar">ðŸ‘¤</div>
     <div class="chat-info">
     <div class="chat-name">\${c.name||c.number}</div>
     <div class="chat-number">\${c.number}</div>
@@ -914,13 +914,13 @@ function toggleChat(jid,name,number){
 function selectAll(){
     filteredChats.forEach(c=>selectedChats.add(c.jid));
     renderChats();
-    showT('✅ '+selectedChats.size+' contacts selected!');
+    showT('âœ… '+selectedChats.size+' contacts selected!');
 }
 
 function deselectAll(){
     selectedChats.clear();
     renderChats();
-    showT('❌ Sab deselect ho gaye!');
+    showT('âŒ Sab deselect ho gaye!');
 }
 
 function filterChats(){
@@ -938,14 +938,14 @@ function updateBcPreview(){
     const el=document.getElementById('bcPreview');
     const msg=document.getElementById('msgPreview')?.value||'';
     const delay=document.getElementById('bc_delay')?.value||5;
-    if(el)el.innerHTML=\`📊 <b style="color:white">\${selectedChats.size}</b> contacts selected | Delay: <b style="color:white">\${delay}s</b> | Est. time: <b style="color:white">\${Math.ceil(selectedChats.size*parseInt(delay)/60)} min</b>\`;
+    if(el)el.innerHTML=\`ðŸ“Š <b style="color:white">\${selectedChats.size}</b> contacts selected | Delay: <b style="color:white">\${delay}s</b> | Est. time: <b style="color:white">\${Math.ceil(selectedChats.size*parseInt(delay)/60)} min</b>\`;
 }
 
 async function generateMsg(){
     const offer=document.getElementById('offerDetails').value;
-    if(!offer.trim()){showT('❌ Offer details likho!');return;}
+    if(!offer.trim()){showT('âŒ Offer details likho!');return;}
     const btn=document.getElementById('genBtn');
-    btn.textContent='⏳ Generating...';btn.disabled=true;
+    btn.textContent='â³ Generating...';btn.disabled=true;
     const personalized=document.getElementById('msgType').value==='personalized';
     try{
         const r=await fetch('/api/generate-message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({offerDetails:offer,customerName:'Dost',personalized})});
@@ -953,10 +953,10 @@ async function generateMsg(){
         if(d.success){
             document.getElementById('msgPreview').value=d.message;
             document.getElementById('generatedMsg').style.display='block';
-            showT('✅ Message generated!');
+            showT('âœ… Message generated!');
         }
-    }catch(e){showT('❌ Error!');}
-    btn.textContent='🤖 AI Se Message Generate Karo';btn.disabled=false;
+    }catch(e){showT('âŒ Error!');}
+    btn.textContent='ðŸ¤– AI Se Message Generate Karo';btn.disabled=false;
     updateBcPreview();
 }
 
@@ -966,13 +966,13 @@ async function sendBroadcast(){
     const personalized=document.getElementById('msgType').value==='personalized';
     const delay=parseInt(document.getElementById('bc_delay').value)||5;
 
-    if(!msg.trim()&&!offer.trim()){showT('❌ Pehle message generate karo!');return;}
-    if(selectedChats.size===0){showT('❌ Contacts select karo!');return;}
-    if(!confirm('📢 '+selectedChats.size+' contacts ko message bhejein?'))return;
+    if(!msg.trim()&&!offer.trim()){showT('âŒ Pehle message generate karo!');return;}
+    if(selectedChats.size===0){showT('âŒ Contacts select karo!');return;}
+    if(!confirm('ðŸ“¢ '+selectedChats.size+' contacts ko message bhejein?'))return;
 
     const contacts=allChats.filter(c=>selectedChats.has(c.jid)).map(c=>({jid:c.jid,name:c.name||c.number,number:c.number}));
     const btn=document.getElementById('sendBcBtn');
-    btn.disabled=true;btn.textContent='⏳ Sending...';
+    btn.disabled=true;btn.textContent='â³ Sending...';
     document.getElementById('bcProgress').style.display='block';
 
     try{
@@ -989,12 +989,12 @@ async function sendBroadcast(){
         });
         const d=await r.json();
         if(d.success){
-            showT('✅ Broadcast shuru! '+contacts.length+' messages jaayenge.');
+            showT('âœ… Broadcast shuru! '+contacts.length+' messages jaayenge.');
             // Progress track karo
             trackProgress(d.broadcast.id,contacts.length,delay);
-        }else{showT('❌ Error: '+(d.error||'Unknown'));}
-    }catch(e){showT('❌ Error: '+e.message);}
-    btn.disabled=false;btn.textContent='📢 Broadcast Bhejo';
+        }else{showT('âŒ Error: '+(d.error||'Unknown'));}
+    }catch(e){showT('âŒ Error: '+e.message);}
+    btn.disabled=false;btn.textContent='ðŸ“¢ Broadcast Bhejo';
 }
 
 function trackProgress(bcId,total,delay){
@@ -1006,7 +1006,7 @@ function trackProgress(bcId,total,delay){
         document.getElementById('bcProgressText').textContent='Sending... '+sent+'/'+total;
         if(sent>=total){
             clearInterval(interval);
-            document.getElementById('bcProgressText').textContent='✅ Broadcast Complete! '+total+'/'+total;
+            document.getElementById('bcProgressText').textContent='âœ… Broadcast Complete! '+total+'/'+total;
             loadData();
         }
     },delay*1000);
@@ -1016,8 +1016,8 @@ function orderCard(o){
     const t=new Date(o.timestamp).toLocaleString('en-PK');
     const bc=o.status==='pending'?'bp':o.status==='approved'?'ba':'br';
     const lb=o.language?'<span style="background:#333;padding:2px 8px;border-radius:10px;font-size:11px;color:#aaa;">'+o.language+'</span>':'';
-    const acts=o.status==='pending'?\`<button class="btn btn-green" onclick="approveO(\${o.orderId})">✅ Approve</button><button class="btn btn-red" onclick="rejectO(\${o.orderId})">❌ Reject</button><button class="btn btn-blue" onclick="openM('\${o.customerJid}')">💬</button>\`:\`<button class="btn btn-blue" onclick="openM('\${o.customerJid}')">💬</button>\`;
-    return \`<div class="card \${o.status}"><div class="card-header"><span class="order-id">#\${o.orderId}</span><div style="display:flex;gap:6px;">\${lb}<span class="badge \${bc}">\${o.status.toUpperCase()}</span></div></div><div class="info">📱 <b>\${o.customerNumber}</b> | 👤 <b>\${o.customerName||'N/A'}</b><br>📸 <b>\${o.hasScreenshot?'✅ Received':'❌ Pending'}</b> | 📅 <b>\${t}</b></div><div class="btn-row">\${acts}</div></div>\`;
+    const acts=o.status==='pending'?\`<button class="btn btn-green" onclick="approveO(\${o.orderId})">âœ… Approve</button><button class="btn btn-red" onclick="rejectO(\${o.orderId})">âŒ Reject</button><button class="btn btn-blue" onclick="openM('\${o.customerJid}')">ðŸ’¬</button>\`:\`<button class="btn btn-blue" onclick="openM('\${o.customerJid}')">ðŸ’¬</button>\`;
+    return \`<div class="card \${o.status}"><div class="card-header"><span class="order-id">#\${o.orderId}</span><div style="display:flex;gap:6px;">\${lb}<span class="badge \${bc}">\${o.status.toUpperCase()}</span></div></div><div class="info">ðŸ“± <b>\${o.customerNumber}</b> | ðŸ‘¤ <b>\${o.customerName||'N/A'}</b><br>ðŸ“¸ <b>\${o.hasScreenshot?'âœ… Received':'âŒ Pending'}</b> | ðŸ“… <b>\${t}</b></div><div class="btn-row">\${acts}</div></div>\`;
 }
 
 function renderOrders(){
@@ -1025,47 +1025,60 @@ function renderOrders(){
     const p=orders.filter(o=>o.status==='pending');
     const a=orders.filter(o=>o.status==='approved');
     const r=orders.filter(o=>o.status==='rejected');
-    document.getElementById('pendingOrders').innerHTML=p.length===0?'<div class="empty">Koi pending nahi ✅</div>':p.map(orderCard).join('');
+    document.getElementById('pendingOrders').innerHTML=p.length===0?'<div class="empty">Koi pending nahi âœ…</div>':p.map(orderCard).join('');
     document.getElementById('approvedOrders').innerHTML=a.length===0?'<div class="empty">Koi approved nahi</div>':a.map(orderCard).join('');
     document.getElementById('rejectedOrders').innerHTML=r.length===0?'<div class="empty">Koi rejected nahi</div>':r.map(orderCard).join('');
 }
 
-async function approveO(id){if(!confirm('Approve?'))return;await fetch('/api/approve/'+id,{method:'POST'});showT('✅ Approved!');loadData();}
-async function rejectO(id){if(!confirm('Reject?'))return;await fetch('/api/reject/'+id,{method:'POST'});showT('❌ Rejected!');loadData();}
+async function approveO(id){if(!confirm('Approve?'))return;await fetch('/api/approve/'+id,{method:'POST'});showT('âœ… Approved!');loadData();}
+async function rejectO(id){if(!confirm('Reject?'))return;await fetch('/api/reject/'+id,{method:'POST'});showT('âŒ Rejected!');loadData();}
 
 function renderBcHistory(){
     const bcs=D.broadcasts||[];
-    document.getElementById('bcHistory').innerHTML=bcs.length===0?'<div class="empty">Koi broadcast nahi</div>':bcs.map(b=>\`<div class="card \${b.status}"><div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="font-weight:bold;color:white;">\${b.status==='completed'?'✅':'⏳'} \${b.status.toUpperCase()}</span><span style="color:#aaa;font-size:12px;">\${new Date(b.createdAt).toLocaleString('en-PK')}</span></div><p style="color:#ccc;font-size:13px;margin-bottom:8px;">\${(b.baseMessage||b.offerDetails||'').substring(0,80)}...</p><p style="color:#aaa;font-size:12px;">Sent:\${b.sentCount||0} | Failed:\${b.failedCount||0} | Total:\${b.totalContacts||0} | Delay:\${b.delaySeconds}s | \${b.personalized?'Personalized':'Same'}</p></div>\`).join('');
+    document.getElementById('bcHistory').innerHTML=bcs.length===0?'<div class="empty">Koi broadcast nahi</div>':bcs.map(b=>\`<div class="card \${b.status}"><div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="font-weight:bold;color:white;">\${b.status==='completed'?'âœ…':'â³'} \${b.status.toUpperCase()}</span><span style="color:#aaa;font-size:12px;">\${new Date(b.createdAt).toLocaleString('en-PK')}</span></div><p style="color:#ccc;font-size:13px;margin-bottom:8px;">\${(b.baseMessage||b.offerDetails||'').substring(0,80)}...</p><p style="color:#aaa;font-size:12px;">Sent:\${b.sentCount||0} | Failed:\${b.failedCount||0} | Total:\${b.totalContacts||0} | Delay:\${b.delaySeconds}s | \${b.personalized?'Personalized':'Same'}</p></div>\`).join('');
 }
 
 function renderProd(){
     const el=document.getElementById('prodList');
     if(!products.length){el.innerHTML='<div class="empty">Koi product nahi</div>';return;}
-    el.innerHTML=products.map((p,i)=>\`<div class="product-card"><div class="product-header"><span style="font-size:15px;font-weight:bold;color:white;">\${p.name}</span><label class="toggle"><input type="checkbox" \${p.active?'checked':''} onchange="products[\${i}].active=this.checked"/><span class="slider"></span></label></div><div class="form-group"><label>Name</label><input value="\${p.name}" onchange="products[\${i}].name=this.value"/></div><div class="form-group"><label>Price</label><input type="number" value="\${p.price}" onchange="products[\${i}].price=parseInt(this.value)||0"/></div><div class="form-group"><label>Description</label><textarea onchange="products[\${i}].description=this.value">\${p.description||''}</textarea></div><div class="form-group"><label>Download Link</label><input value="\${p.downloadLink||''}" placeholder="https://drive.google.com/..." onchange="products[\${i}].downloadLink=this.value"/></div><div class="form-group"><label>Features</label><div class="feature-list">\${(p.features||[]).map((f,j)=>\`<div class="feature-tag">\${f}<button onclick="rmF(\${i},\${j})">×</button></div>\`).join('')}</div><div class="feature-input"><input id="nf\${i}" placeholder="New feature..." onkeypress="if(event.key==='Enter')addF(\${i})"/><button onclick="addF(\${i})">+</button></div></div><div class="btn-row"><button class="btn btn-green" onclick="saveProd()">💾 Save</button><button class="btn btn-red" onclick="rmP(\${i})">🗑️ Delete</button></div></div>\`).join('');
+    el.innerHTML=products.map((p,i)=>\`<div class="product-card"><div class="product-header"><span style="font-size:15px;font-weight:bold;color:white;">\${p.name}</span><label class="toggle"><input type="checkbox" \${p.active?'checked':''} onchange="products[\${i}].active=this.checked"/><span class="slider"></span></label></div><div class="form-group"><label>Name</label><input value="\${p.name}" onchange="products[\${i}].name=this.value"/></div><div class="form-group"><label>Price</label><input type="number" value="\${p.price}" onchange="products[\${i}].price=parseInt(this.value)||0"/></div><div class="form-group"><label>Description</label><textarea onchange="products[\${i}].description=this.value">\${p.description||''}</textarea></div><div class="form-group"><label>Download Link</label><input value="\${p.downloadLink||''}" placeholder="https://drive.google.com/..." onchange="products[\${i}].downloadLink=this.value"/></div><div class="form-group"><label>Features</label><div class="feature-list">\${(p.features||[]).map((f,j)=>\`<div class="feature-tag">\${f}<button onclick="rmF(\${i},\${j})">Ã—</button></div>\`).join('')}</div><div class="feature-input"><input id="nf\${i}" placeholder="New feature..." onkeypress="if(event.key==='Enter')addF(\${i})"/><button onclick="addF(\${i})">+</button></div></div><div class="btn-row"><button class="btn btn-green" onclick="saveProd()">ðŸ’¾ Save</button><button class="btn btn-red" onclick="rmP(\${i})">ðŸ—‘ï¸ Delete</button></div></div>\`).join('');
 }
 
 function addF(i){const inp=document.getElementById('nf'+i);if(!inp.value.trim())return;if(!products[i].features)products[i].features=[];products[i].features.push(inp.value.trim());inp.value='';renderProd();}
 function rmF(i,j){products[i].features.splice(j,1);renderProd();}
 function addProduct(){products.push({id:Date.now(),name:'New Product',price:999,description:'',features:[],downloadLink:'',active:false});renderProd();}
 function rmP(i){if(confirm('Delete?')){products.splice(i,1);renderProd();}}
-async function saveProd(){const r=await fetch('/api/products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(products)});const d=await r.json();showT(d.success?'✅ Saved!':'❌ Error!');loadData();}
+async function saveProd(){const r=await fetch('/api/products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(products)});const d=await r.json();showT(d.success?'âœ… Saved!':'âŒ Error!');loadData();}
 
 function renderPay(){const p=D.payment||{};document.getElementById('ep_n').value=p.easypaisa?.number||'';document.getElementById('ep_nm').value=p.easypaisa?.name||'';document.getElementById('jc_n').value=p.jazzcash?.number||'';document.getElementById('jc_nm').value=p.jazzcash?.name||'';document.getElementById('bk_n').value=p.bank?.bankName||'';document.getElementById('bk_a').value=p.bank?.accountNumber||'';document.getElementById('bk_h').value=p.bank?.accountName||'';document.getElementById('bk_i').value=p.bank?.iban||'';}
-async function savePayment(){const d={easypaisa:{number:document.getElementById('ep_n').value,name:document.getElementById('ep_nm').value},jazzcash:{number:document.getElementById('jc_n').value,name:document.getElementById('jc_nm').value},bank:{bankName:document.getElementById('bk_n').value,accountNumber:document.getElementById('bk_a').value,accountName:document.getElementById('bk_h').value,iban:document.getElementById('bk_i').value}};const r=await fetch('/api/payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});const x=await r.json();showT(x.success?'✅ Payment Saved!':'❌ Error!');}
+async function savePayment(){const d={easypaisa:{number:document.getElementById('ep_n').value,name:document.getElementById('ep_nm').value},jazzcash:{number:document.getElementById('jc_n').value,name:document.getElementById('jc_nm').value},bank:{bankName:document.getElementById('bk_n').value,accountNumber:document.getElementById('bk_a').value,accountName:document.getElementById('bk_h').value,iban:document.getElementById('bk_i').value}};const r=await fetch('/api/payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});const x=await r.json();showT(x.success?'âœ… Payment Saved!':'âŒ Error!');}
 
 function renderPrompt(){document.getElementById('aiP').value=D.aiPrompt||'';}
-async function savePrompt(){const r=await fetch('/api/prompt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:document.getElementById('aiP').value})});const d=await r.json();showT(d.success?'✅ Saved!':'❌ Error!');}
+async function savePrompt(){const r=await fetch('/api/prompt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:document.getElementById('aiP').value})});const d=await r.json();showT(d.success?'âœ… Saved!':'âŒ Error!');}
 
 function renderSet(){const s=D.settings||{};document.getElementById('s_bn').value=s.businessName||'';document.getElementById('s_an').value=s.adminNumber||'';}
-async function saveSettings(){const pw=document.getElementById('s_pw').value;const d={businessName:document.getElementById('s_bn').value,adminNumber:document.getElementById('s_an').value};if(pw)d.dashboardPassword=pw;const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});const x=await r.json();showT(x.success?'✅ Saved!':'❌ Error!');document.getElementById('s_pw').value='';}
+async function saveSettings(){const pw=document.getElementById('s_pw').value;const d={businessName:document.getElementById('s_bn').value,adminNumber:document.getElementById('s_an').value};if(pw)d.dashboardPassword=pw;const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});const x=await r.json();showT(x.success?'âœ… Saved!':'âŒ Error!');document.getElementById('s_pw').value='';}
 
-async function resetSess(){if(!confirm('Reset? Naya QR scan karna hoga!'))return;await fetch('/api/reset-session',{method:'POST'});showT('🔄 Resetting...');setTimeout(()=>window.location='/qr',3000);}
+async function resetSess(){if(!confirm('Reset? Naya QR scan karna hoga!'))return;await fetch('/api/reset-session',{method:'POST'});showT('ðŸ”„ Resetting...');setTimeout(()=>window.location='/qr',3000);}
 
-function showPage(p,el){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));document.getElementById('page-'+p).classList.add('active');if(el)el.classList.add('active');const titles={orders:'📦 Orders',broadcast:'📢 Smart Broadcast',products:'🎨 Products',payment:'💳 Payment',prompt:'🤖 AI Prompt',settings:'⚙️ Settings'};document.getElementById('pt').textContent=titles[p]||p;const ss=['orders'].includes(p);document.getElementById('sg').style.display=ss?'grid':'none';document.getElementById('rc').style.display=ss?'block':'none';if(p==='broadcast'&&D.botStatus==='connected'){loadChats();}}
+function showPage(p){
+document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
+const pageEl=document.getElementById('page-'+p);
+if(pageEl)pageEl.classList.add('active');
+const navEl=document.getElementById('nav-'+p);
+if(navEl)navEl.classList.add('active');
+const titles={orders:'ðŸ“¦ Orders',broadcast:'ðŸ“¢ Smart Broadcast',products:'ðŸŽ¨ Products',payment:'ðŸ’³ Payment',prompt:'ðŸ¤– AI Prompt',settings:'âš™ï¸ Settings'};
+document.getElementById('pt').textContent=titles[p]||p;
+const ss=['orders'].includes(p);
+document.getElementById('sg').style.display=ss?'grid':'none';
+document.getElementById('rc').style.display=ss?'block':'none';
+if(p==='broadcast'&&D.botStatus==='connected'){loadChats();}
+}
 
 function openM(jid){document.getElementById('mj').value=jid;document.getElementById('mm').classList.add('show');}
 function closeM(){document.getElementById('mm').classList.remove('show');}
-async function sendMsg(){const jid=document.getElementById('mj').value;const msg=document.getElementById('mt').value;if(!msg.trim())return;const r=await fetch('/api/send-message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jid,message:msg})});const d=await r.json();showT(d.success?'✅ Sent!':'❌ Error!');if(d.success){closeM();document.getElementById('mt').value='';}}
+async function sendMsg(){const jid=document.getElementById('mj').value;const msg=document.getElementById('mt').value;if(!msg.trim())return;const r=await fetch('/api/send-message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jid,message:msg})});const d=await r.json();showT(d.success?'âœ… Sent!':'âŒ Error!');if(d.success){closeM();document.getElementById('mt').value='';}}
 
 function showT(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',3000);}
 
@@ -1081,12 +1094,12 @@ setInterval(()=>{if(D.botStatus==='connected')loadChats();},30000);
 });
 
 server.listen(process.env.PORT || 3000, () => {
-    console.log('🌐 Server ready! /dashboard | /qr');
+    console.log('ðŸŒ Server ready! /dashboard | /qr');
 });
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // MESSAGE HANDLER
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function handleMessage(sock, message) {
     try {
         if (message.key.fromMe) return;
@@ -1114,16 +1127,16 @@ async function handleMessage(sock, message) {
                     await saveData();
                     const ai = await getAI(text, senderId, senderName, lang);
                     await sock.sendPresenceUpdate('paused', senderId);
-                    const pfx = { urdu: `🎤 آپ: "${text}"\n\n`, roman_urdu: `🎤 Aap: "${text}"\n\n`, english: `🎤 You said: "${text}"\n\n` };
+                    const pfx = { urdu: `ðŸŽ¤ Ø¢Ù¾: "${text}"\n\n`, roman_urdu: `ðŸŽ¤ Aap: "${text}"\n\n`, english: `ðŸŽ¤ You said: "${text}"\n\n` };
                     await sock.sendMessage(senderId, { text: (pfx[lang] || pfx.roman_urdu) + ai.message }, { quoted: message });
                     if (ai.shouldOrder) await handleOrder(sock, senderId, senderName, ai, message, lang);
                 } else {
                     await sock.sendPresenceUpdate('paused', senderId);
-                    await sock.sendMessage(senderId, { text: '⚠️ Voice samajh nahi aaya. Text likhein! 🙏' });
+                    await sock.sendMessage(senderId, { text: 'âš ï¸ Voice samajh nahi aaya. Text likhein! ðŸ™' });
                 }
             } catch (e) {
                 await sock.sendPresenceUpdate('paused', senderId);
-                await sock.sendMessage(senderId, { text: '⚠️ Voice error. Text likhein please!' });
+                await sock.sendMessage(senderId, { text: 'âš ï¸ Voice error. Text likhein please!' });
             }
             return;
         }
@@ -1133,9 +1146,9 @@ async function handleMessage(sock, message) {
             if (order) {
                 order.hasScreenshot = true; await saveData();
                 const lang = botData.customers[senderId]?.language || 'roman_urdu';
-                const msgs = { urdu: `📸 موصول!\nآرڈر #${order.orderId}\n✅ تصدیق ہو رہی ہے\n⏳ 1 گھنٹے میں!`, roman_urdu: `📸 Screenshot Received!\nOrder #${order.orderId}\n✅ Verify ho raha hai\n⏳ 1 ghante mein!`, english: `📸 Received!\nOrder #${order.orderId}\n✅ Verifying\n⏳ 1 hour!` };
+                const msgs = { urdu: `ðŸ“¸ Ù…ÙˆØµÙˆÙ„!\nØ¢Ø±ÚˆØ± #${order.orderId}\nâœ… ØªØµØ¯ÛŒÙ‚ ÛÙˆ Ø±ÛÛŒ ÛÛ’\nâ³ 1 Ú¯Ú¾Ù†Ù¹Û’ Ù…ÛŒÚº!`, roman_urdu: `ðŸ“¸ Screenshot Received!\nOrder #${order.orderId}\nâœ… Verify ho raha hai\nâ³ 1 ghante mein!`, english: `ðŸ“¸ Received!\nOrder #${order.orderId}\nâœ… Verifying\nâ³ 1 hour!` };
                 await sock.sendMessage(senderId, { text: msgs[lang] || msgs.roman_urdu });
-                try { await sock.sendMessage(botData.settings.adminNumber + '@s.whatsapp.net', { text: `🔔 Payment Screenshot!\nOrder #${order.orderId}\n${senderName} | ${order.customerNumber}\nDashboard pe approve karo! ⚡` }); } catch (e) {}
+                try { await sock.sendMessage(botData.settings.adminNumber + '@s.whatsapp.net', { text: `ðŸ”” Payment Screenshot!\nOrder #${order.orderId}\n${senderName} | ${order.customerNumber}\nDashboard pe approve karo! âš¡` }); } catch (e) {}
             } else {
                 const lang = botData.customers[senderId]?.language || 'roman_urdu';
                 const ai = await getAI('[image bheja bina order]', senderId, senderName, lang);
@@ -1151,7 +1164,7 @@ async function handleMessage(sock, message) {
         botData.customers[senderId].language = lang;
         await saveData();
 
-        console.log(`📩 ${senderName}[${lang}]: ${userMessage}`);
+        console.log(`ðŸ“© ${senderName}[${lang}]: ${userMessage}`);
         await sock.sendPresenceUpdate('composing', senderId);
         const ai = await getAI(userMessage, senderId, senderName, lang);
         await sock.sendPresenceUpdate('paused', senderId);
@@ -1162,17 +1175,17 @@ async function handleMessage(sock, message) {
     } catch (e) { console.error('Handle error:', e.message); }
 }
 
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // WHATSAPP BOT
-// ─────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function startBot() {
     try {
-        console.log(`🔄 Start attempt #${++connectAttempts}`);
+        console.log(`ðŸ”„ Start attempt #${++connectAttempts}`);
         await loadData();
 
         const { state, saveCreds } = await useUpstashAuthState();
         const { version, isLatest } = await fetchLatestBaileysVersion();
-        console.log(`📱 WA v${version.join('.')} Latest:${isLatest}`);
+        console.log(`ðŸ“± WA v${version.join('.')} Latest:${isLatest}`);
 
         globalStore = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
 
@@ -1206,13 +1219,13 @@ async function startBot() {
                 currentQR = qr;
                 botStatus = 'qr_ready';
                 qrRetryCount++;
-                console.log(`📱 QR Ready #${qrRetryCount}! /qr pe jao!`);
+                console.log(`ðŸ“± QR Ready #${qrRetryCount}! /qr pe jao!`);
             }
 
             if (connection === 'close') {
                 currentQR = null;
                 const code = lastDisconnect?.error?.output?.statusCode;
-                console.log(`❌ Disconnected code:${code}`);
+                console.log(`âŒ Disconnected code:${code}`);
 
                 if (code === DisconnectReason.loggedOut) {
                     botStatus = 'logged_out';
@@ -1220,13 +1233,17 @@ async function startBot() {
                     qrRetryCount = 0;
                     setTimeout(startBot, 5000);
                 } else if (!code || code === undefined) {
-                    botStatus = 'reconnecting';
-                    const delay = Math.min(connectAttempts * 3000, 15000);
-                    console.log(`⚠️ Unknown disconnect — retry ${delay/1000}s`);
+                    // undefined = IP block ya network issue
+                    // QR show karo fresh connection ke liye
+                    botStatus = 'qr_needed';
+                    currentQR = null;
+                    const delay = Math.min(connectAttempts * 5000, 30000);
+                    console.log(`âš ï¸ Unknown disconnect â€” ${delay/1000}s mein fresh QR lega...`);
+                    // Credentials clear NAHI karo â€” sirf reconnect
                     setTimeout(startBot, delay);
                 } else if (code === 405) {
                     botStatus = 'reconnecting';
-                    console.log('⚠️ 405 — 30s retry...');
+                    console.log('âš ï¸ 405 â€” 30s retry...');
                     setTimeout(startBot, 30000);
                 } else {
                     botStatus = 'reconnecting';
@@ -1239,7 +1256,7 @@ async function startBot() {
                 botStatus = 'connected';
                 connectAttempts = 0;
                 qrRetryCount = 0;
-                console.log('✅ WhatsApp Connected! Mega Agency v4 LIVE!');
+                console.log('âœ… WhatsApp Connected! Mega Agency v4 LIVE!');
 
                 // Existing chats fetch karo background mein
                 setTimeout(() => fetchExistingChats(sock), 3000);
@@ -1268,5 +1285,5 @@ async function startBot() {
     }
 }
 
-console.log('🚀 Mega Agency AI Sales Bot v4 — STARTING...');
+console.log('ðŸš€ Mega Agency AI Sales Bot v4 â€” STARTING...');
 startBot();
