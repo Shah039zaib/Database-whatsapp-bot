@@ -40,58 +40,6 @@ async function redisSet(key, value) {
         return true;
     } catch (e) { return false; }
 }
-// ─────────────────────────────────────────
-// UPSTASH AUTH STATE — WhatsApp Session
-// ─────────────────────────────────────────
-async function useUpstashAuthState() {
-    const CREDS_KEY = 'wa_creds_v6';
-    const KEYS_KEY = 'wa_keys_v6';
-
-    let creds = await redisGet(CREDS_KEY);
-    let keys = await redisGet(KEYS_KEY) || {};
-
-    if (!creds) {
-        const { initAuthCreds } = require('@whiskeysockets/baileys');
-        creds = initAuthCreds();
-        await redisSet(CREDS_KEY, creds);
-        console.log('🔑 Fresh credentials created!');
-    } else {
-        console.log('✅ WhatsApp credentials Upstash se load — dobara QR nahi aayega!');
-    }
-
-    const state = {
-        creds,
-        keys: {
-            get: async (type, ids) => {
-                const data = {};
-                for (const id of ids) {
-                    const val = keys[`${type}-${id}`];
-                    if (val) data[id] = val;
-                }
-                return data;
-            },
-            set: async (data) => {
-                for (const category of Object.keys(data)) {
-                    for (const id of Object.keys(data[category])) {
-                        const val = data[category][id];
-                        if (val) keys[`${category}-${id}`] = val;
-                        else delete keys[`${category}-${id}`];
-                    }
-                }
-                await redisSet(KEYS_KEY, keys);
-            }
-        }
-    };
-
-    const saveCreds = async () => {
-        await redisSet(CREDS_KEY, state.creds);
-        console.log('💾 Credentials Upstash mein save!');
-    };
-
-    return { state, saveCreds };
-}
-
-
 
 // ─────────────────────────────────────────
 // GOOGLE SHEETS
@@ -707,7 +655,7 @@ input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform
 </head>
 <body>
 <div class="sidebar">
-<div class="sidebar-logo"><h2>🏪 Mega</h2><p>Admin Panel</p></div>
+<div class="sidebar-logo"><h2> Mega</h2><p>Admin Panel</p></div>
 <div class="nav-item active" id="nav-orders" onclick="showPage('orders')"><span>📦</span><span> Orders</span></div>
 <div class="nav-item" id="nav-broadcast" onclick="showPage('broadcast')"><span>📢</span><span> Broadcast</span></div>
 <div class="nav-item" id="nav-customers" onclick="showPage('customers')"><span>👥</span><span> Customers</span></div>
@@ -721,40 +669,40 @@ input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform
 
 <div class="main">
 <div class="topbar">
-<h1 id="pageTitle">📦 Orders</h1>
+<h1 id="pageTitle"> Orders</h1>
 <div style="display:flex;gap:10px;align-items:center;">
-<span class="bot-badge" id="botBadge">⏳ Loading...</span>
-<button class="btn btn-gray" onclick="loadData()" style="padding:6px 12px;font-size:12px;">🔄</button>
+<span class="bot-badge" id="botBadge">Loading...</span>
+<button class="btn btn-gray" onclick="loadData()" style="padding:6px 12px;font-size:12px;">🔄reload</button>
 </div></div>
 
 <div class="stats-grid" id="statsGrid"></div>
-<div class="revenue-card" id="revenueCard"><p>💰 Total Revenue</p><h2 id="revenue">PKR 0</h2><p id="revenueDetail">0 orders approved</p></div>
+<div class="revenue-card" id="revenueCard"><p> Total Revenue</p><h2 id="revenue">PKR 0</h2><p id="revenueDetail">0 orders approved</p></div>
 
 <!-- ORDERS -->
 <div class="page active" id="page-orders">
-<div class="section"><div class="section-header"><h3>⏳ Pending Orders</h3></div><div class="section-body" id="pendingOrders"><div class="empty">Loading...</div></div></div>
-<div class="section"><div class="section-header"><h3>✅ Approved Orders</h3></div><div class="section-body" id="approvedOrders"><div class="empty">Loading...</div></div></div>
-<div class="section"><div class="section-header"><h3>❌ Rejected Orders</h3></div><div class="section-body" id="rejectedOrders"><div class="empty">Loading...</div></div></div>
+<div class="section"><div class="section-header"><h3> Pending Orders</h3></div><div class="section-body" id="pendingOrders"><div class="empty">Loading...</div></div></div>
+<div class="section"><div class="section-header"><h3> Approved Orders</h3></div><div class="section-body" id="approvedOrders"><div class="empty">Loading...</div></div></div>
+<div class="section"><div class="section-header"><h3> Rejected Orders</h3></div><div class="section-body" id="rejectedOrders"><div class="empty">Loading...</div></div></div>
 </div>
 
 <!-- BROADCAST -->
 <div class="page" id="page-broadcast">
-<div class="section"><div class="section-header"><h3>🤖 AI Message Generator</h3></div><div class="section-body">
-<div class="info-box">✅ AI tumhara offer message generate karega</div>
+<div class="section"><div class="section-header"><h3>AI Message Generator</h3></div><div class="section-body">
+<div class="info-box"> AI tumhara offer message generate karega</div>
 <div class="form-group"><label>Offer Details (AI ko batao)</label><textarea id="offerDetails" rows="3" placeholder="e.g. 100+ Shopify themes bundle sirf PKR 999 mein — limited time offer!"></textarea></div>
 <div class="form-group"><label>Message Type</label>
-<select id="msgType"><option value="personalized">🎯 Personalized (har customer ke naam se)</option><option value="same">📋 Same message sab ko</option></select></div>
-<button class="btn btn-purple" onclick="generateMsg()" id="genBtn">🤖 AI Se Message Generate Karo</button>
+<select id="msgType"><option value="personalized"> Personalized (har customer ke naam se)</option><option value="same"> Same message sab ko</option></select></div>
+<button class="btn btn-purple" onclick="generateMsg()" id="genBtn"> AI Se Message Generate Karo</button>
 <div id="generatedMsg" style="display:none;margin-top:15px;">
 <div class="form-group"><label>Generated Message (edit kar sakte ho)</label><textarea id="msgPreview" rows="6"></textarea></div>
 </div>
 </div></div>
 
 <div class="section"><div class="section-header">
-<h3>📱 Contacts Select Karo</h3>
+<h3> Contacts Select Karo</h3>
 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-<button class="btn btn-green" onclick="selectAll()">✅ Select All</button>
-<button class="btn btn-gray" onclick="deselectAll()">❌ Deselect</button>
+<button class="btn btn-green" onclick="selectAll()"> Select All</button>
+<button class="btn btn-gray" onclick="deselectAll()"> Deselect</button>
 <span id="selCount" style="color:#25D366;font-size:13px;"></span>
 </div>
 </div><div class="section-body">
@@ -762,79 +710,79 @@ input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform
 <div class="form-group"><label>Delay Between Messages (seconds)</label><input type="number" id="bc_delay" value="5" min="1" max="60"/></div>
 <input type="text" id="chatSearch" placeholder="🔍 Search contacts..." oninput="filterChats()" style="width:100%;padding:10px;background:#0f0f0f;border:1px solid #333;border-radius:8px;color:white;outline:none;"/>
 </div>
-<div id="chatStatus" style="text-align:center;color:#25D366;padding:20px;font-size:14px;">⏳ Bot connect hone ke baad contacts load honge...</div>
+<div id="chatStatus" style="text-align:center;color:#25D366;padding:20px;font-size:14px;"> Bot connect hone ke baad contacts load honge...</div>
 <div id="chatsList"></div>
 </div></div>
 
-<div class="section"><div class="section-header"><h3>🚀 Send Broadcast</h3></div><div class="section-body">
+<div class="section"><div class="section-header"><h3> Send Broadcast</h3></div><div class="section-body">
 <div id="bcPreview" style="color:#aaa;font-size:13px;margin-bottom:15px;"></div>
-<button class="btn btn-green" onclick="sendBroadcast()" style="width:100%;padding:12px;font-size:16px;">📢 Broadcast Bhejo</button>
+<button class="btn btn-green" onclick="sendBroadcast()" style="width:100%;padding:12px;font-size:16px;"> Broadcast Bhejo</button>
 <div id="bcProgress" style="display:none;margin-top:15px;">
 <p style="color:#25D366;font-size:14px;" id="bcProgressText">Sending...</p>
 <div class="progress-bar"><div class="progress-fill" id="bcProgressFill" style="width:0%"></div></div>
 </div>
 </div></div>
 
-<div class="section"><div class="section-header"><h3>📋 Broadcast History</h3></div><div class="section-body" id="bcHistory"><div class="empty">Loading...</div></div></div>
+<div class="section"><div class="section-header"><h3> Broadcast History</h3></div><div class="section-body" id="bcHistory"><div class="empty">Loading...</div></div></div>
 </div>
 
 <!-- CUSTOMERS -->
 <div class="page" id="page-customers">
-<div class="section"><div class="section-header"><h3>👥 Customers</h3><span id="custCount" style="color:#aaa;font-size:13px;"></span></div>
+<div class="section"><div class="section-header"><h3> Customers</h3><span id="custCount" style="color:#aaa;font-size:13px;"></span></div>
 <div class="section-body" id="custList"><div class="empty">Loading...</div></div>
 </div></div>
 
 <!-- PRODUCTS -->
 <div class="page" id="page-products">
-<div class="section"><div class="section-header"><h3>🎨 Products</h3><button class="btn btn-green" onclick="addProduct()">+ Add Product</button></div>
+<div class="section"><div class="section-header"><h3> Products</h3><button class="btn btn-green" onclick="addProduct()">+ Add Product</button></div>
 <div class="section-body" id="productsList"></div>
 </div></div>
 
 <!-- PAYMENT -->
 <div class="page" id="page-payment">
-<div class="section"><div class="section-header"><h3>💳 Payment Details</h3></div><div class="section-body">
-<h4 style="color:#aaa;margin-bottom:15px">📱 EasyPaisa</h4>
+<div class="section"><div class="section-header"><h3> Payment Details</h3></div><div class="section-body">
+<h4 style="color:#aaa;margin-bottom:15px"> EasyPaisa</h4>
 <div class="form-group"><label>Number</label><input id="ep_number" placeholder="03XX-XXXXXXX"/></div>
 <div class="form-group"><label>Account Name</label><input id="ep_name" placeholder="Tumhara Naam"/></div>
-<h4 style="color:#aaa;margin:15px 0">📱 JazzCash</h4>
+<h4 style="color:#aaa;margin:15px 0"> JazzCash</h4>
 <div class="form-group"><label>Number</label><input id="jc_number" placeholder="03XX-XXXXXXX"/></div>
 <div class="form-group"><label>Account Name</label><input id="jc_name" placeholder="Tumhara Naam"/></div>
-<h4 style="color:#aaa;margin:15px 0">🏦 Bank Account</h4>
+<h4 style="color:#aaa;margin:15px 0"> Bank Account</h4>
 <div class="form-group"><label>Bank Name</label><input id="bank_name" placeholder="HBL"/></div>
 <div class="form-group"><label>Account Number</label><input id="bank_acc" placeholder="XXXXXXXXXXXXXXX"/></div>
 <div class="form-group"><label>Account Holder Name</label><input id="bank_holder" placeholder="Tumhara Naam"/></div>
 <div class="form-group"><label>IBAN</label><input id="bank_iban" placeholder="PK00XXXX..."/></div>
-<button class="save-btn" onclick="savePayment()">💾 Save Payment Details</button>
+<button class="save-btn" onclick="savePayment()"> Save Payment Details</button>
 </div></div></div>
 
 <!-- AI PROMPT -->
 <div class="page" id="page-prompt">
-<div class="section"><div class="section-header"><h3>🤖 AI Sales Agent Prompt</h3></div><div class="section-body">
-<div class="warn-box">⚠️ ORDER_READY word zaroor rakho. Price negotiation rules strong rakho!</div>
+<div class="section"><div class="section-header"><h3>AI Sales Agent Prompt</h3></div><div class="section-body">
+<div class="warn-box"> ORDER_READY word zaroor rakho. Price negotiation rules strong rakho!</div>
 <div class="form-group"><label>System Prompt</label><textarea id="aiPrompt" rows="20" style="min-height:400px;"></textarea></div>
-<button class="save-btn" onclick="savePrompt()">💾 Save Prompt</button>
+<button class="save-btn" onclick="savePrompt()"> Save Prompt</button>
 </div></div></div>
 
 <!-- SETTINGS -->
 <div class="page" id="page-settings">
-<div class="section"><div class="section-header"><h3>⚙️ Settings</h3></div><div class="section-body">
+<div class="section"><div class="section-header"><h3> Settings</h3></div><div class="section-body">
 <div class="form-group"><label>Business Name</label><input id="s_bizName" placeholder="Mega Agency"/></div>
 <div class="form-group"><label>Admin WhatsApp Number (92XXXXXXXXXX)</label><input id="s_adminNum" placeholder="923001234567"/></div>
 <div class="form-group"><label>Dashboard Password (khali chhodo agar same rakho)</label><input id="s_password" type="password" placeholder="New password..."/></div>
-<button class="save-btn" onclick="saveSettings()">💾 Save Settings</button>
+<button class="save-btn" onclick="saveSettings()"> Save Settings</button>
 </div></div></div>
 </div>
 
 <!-- Message Modal -->
 <div class="msg-modal" id="msgModal">
-<div class="msg-box"><h3>💬 Custom Message Bhejo</h3>
+<div class="msg-box"><h3> Custom Message Bhejo</h3>
 <input type="hidden" id="msgJid"/>
 <div class="form-group"><label>Message</label><textarea id="msgText" rows="4" placeholder="Yahan message likho..."></textarea></div>
 <div class="btn-row">
-<button class="btn btn-green" onclick="sendCustomMsg()">📤 Send</button>
+<button class="btn btn-green" onclick="sendCustomMsg()"> Send</button>
 <button class="btn btn-gray" onclick="closeModal()">Cancel</button>
 </div></div></div>
-<div class="toast" id="toast">✅ Saved!</div>
+<div class="toast" id="toast"> Saved!</div>
 
 <script>
 let allData={};let products=[];let allChats=[];let selectedChats=new Set();let filteredChats=[];
@@ -847,13 +795,13 @@ async function loadData(){
 function renderAll(){
     const badge=document.getElementById('botBadge');
     badge.className='bot-badge '+(allData.botStatus==='connected'?'badge-live':'badge-off');
-    badge.textContent=allData.botStatus==='connected'?'🟢 Bot Live':'🔴 '+allData.botStatus;
+    badge.textContent=allData.botStatus==='connected'?'Bot Live':' '+allData.botStatus;
     const s=allData.stats||{};
     document.getElementById('statsGrid').innerHTML=\`
-    <div class="stat-card" style="border-top:3px solid #f39c12"><h2 style="color:#f39c12">\${s.pending||0}</h2><p>⏳ Pending</p></div>
-    <div class="stat-card" style="border-top:3px solid #25D366"><h2 style="color:#25D366">\${s.approved||0}</h2><p>✅ Approved</p></div>
-    <div class="stat-card" style="border-top:3px solid #e74c3c"><h2 style="color:#e74c3c">\${s.rejected||0}</h2><p>❌ Rejected</p></div>
-    <div class="stat-card" style="border-top:3px solid #3498db"><h2 style="color:#3498db">\${s.existingChats||0}</h2><p>📱 Chats</p></div>\`;
+    <div class="stat-card" style="border-top:3px solid #f39c12"><h2 style="color:#f39c12">\${s.pending||0}</h2><p>Pending</p></div>
+    <div class="stat-card" style="border-top:3px solid #25D366"><h2 style="color:#25D366">\${s.approved||0}</h2><p> Approved</p></div>
+    <div class="stat-card" style="border-top:3px solid #e74c3c"><h2 style="color:#e74c3c">\${s.rejected||0}</h2><p> Rejected</p></div>
+    <div class="stat-card" style="border-top:3px solid #3498db"><h2 style="color:#3498db">\${s.existingChats||0}</h2><p>Chats</p></div>\`;
     document.getElementById('revenue').textContent='PKR '+(s.revenue||0).toLocaleString();
     document.getElementById('revenueDetail').textContent=(s.approved||0)+' orders approved';
     renderOrders();renderBcHistory();renderCustomers();renderProducts();renderPayment();renderPrompt();renderSettings();
@@ -863,20 +811,20 @@ function orderCard(o){
     const time=new Date(o.timestamp).toLocaleString('en-PK');
     const bc=o.status==='pending'?'bp':o.status==='approved'?'ba':'br';
     const lb=o.language?'<span style="background:#333;padding:2px 8px;border-radius:10px;font-size:11px;color:#aaa;">'+o.language+'</span>':'';
-    const acts=o.status==='pending'?\`<button class="btn btn-green" onclick="approveOrder(\${o.orderId})">✅ Approve</button><button class="btn btn-red" onclick="rejectOrder(\${o.orderId})">❌ Reject</button><button class="btn btn-blue" onclick="openMsg('\${o.customerJid}')">💬 Message</button>\`:\`<button class="btn btn-blue" onclick="openMsg('\${o.customerJid}')">💬 Message</button>\`;
+    const acts=o.status==='pending'?\`<button class="btn btn-green" onclick="approveOrder(\${o.orderId})"> Approve</button><button class="btn btn-red" onclick="rejectOrder(\${o.orderId})">❌ Reject</button><button class="btn btn-blue" onclick="openMsg('\${o.customerJid}')">💬 Message</button>\`:\`<button class="btn btn-blue" onclick="openMsg('\${o.customerJid}')">💬 Message</button>\`;
     return \`<div class="order-card \${o.status}"><div class="order-header"><span class="order-id">#\${o.orderId}</span><div style="display:flex;gap:6px;">\${lb}<span class="badge \${bc}">\${o.status.toUpperCase()}</span></div></div><div class="order-info">📱 Number: <b>\${o.customerNumber}</b><br>👤 Name: <b>\${o.customerName||'N/A'}</b><br>📸 Screenshot: <b>\${o.hasScreenshot?'✅ Received':'❌ Pending'}</b><br>📅 Time: <b>\${time}</b></div><div class="btn-row">\${acts}</div></div>\`;
 }
 
 function renderOrders(){
     const orders=Object.values(allData.orders||{}).sort((a,b)=>b.timestamp-a.timestamp);
     const p=orders.filter(o=>o.status==='pending');const a=orders.filter(o=>o.status==='approved');const r=orders.filter(o=>o.status==='rejected');
-    document.getElementById('pendingOrders').innerHTML=p.length===0?'<div class="empty">Koi pending order nahi ✅</div>':p.map(orderCard).join('');
+    document.getElementById('pendingOrders').innerHTML=p.length===0?'<div class="empty">Koi pending order nahi </div>':p.map(orderCard).join('');
     document.getElementById('approvedOrders').innerHTML=a.length===0?'<div class="empty">Koi approved order nahi</div>':a.map(orderCard).join('');
     document.getElementById('rejectedOrders').innerHTML=r.length===0?'<div class="empty">Koi rejected order nahi</div>':r.map(orderCard).join('');
 }
 
-async function approveOrder(id){if(!confirm('Approve?'))return;await fetch('/api/approve/'+id,{method:'POST'});showToast('✅ Approved!');loadData();}
-async function rejectOrder(id){if(!confirm('Reject?'))return;await fetch('/api/reject/'+id,{method:'POST'});showToast('❌ Rejected!');loadData();}
+async function approveOrder(id){if(!confirm('Approve?'))return;await fetch('/api/approve/'+id,{method:'POST'});showToast('Approved!');loadData();}
+async function rejectOrder(id){if(!confirm('Reject?'))return;await fetch('/api/reject/'+id,{method:'POST'});showToast(' Rejected!');loadData();}
 
 async function loadChats(){
     try{const r=await fetch('/api/chats');const d=await r.json();allChats=d.chats||[];filteredChats=[...allChats];renderChats();}
@@ -885,10 +833,10 @@ async function loadChats(){
 
 function renderChats(){
     const cs=document.getElementById('chatStatus');const cl=document.getElementById('chatsList');
-    if(allChats.length===0){cs.style.display='block';cs.textContent=allData.botStatus==='connected'?'⏳ Chats load ho rahi hain...':'❌ Bot connect karo pehle!';cl.innerHTML='';updateSelCount();return;}
+    if(allChats.length===0){cs.style.display='block';cs.textContent=allData.botStatus==='connected'?'Chats load ho rahi hain...':' Bot connect karo pehle!';cl.innerHTML='';updateSelCount();return;}
     cs.style.display='none';
     cl.innerHTML=filteredChats.map(c=>\`<div class="chat-item \${selectedChats.has(c.jid)?'selected':''}" onclick="toggleChat('\${c.jid}')">
-    <div class="chat-avatar">👤</div>
+    <div class="chat-avatar"></div>
     <div class="chat-info"><div class="chat-name">\${c.name||c.number}</div><div class="chat-number">\${c.number}</div></div>
     <input type="checkbox" \${selectedChats.has(c.jid)?'checked':''} onclick="event.stopPropagation()"/>
     </div>\`).join('');
@@ -896,7 +844,7 @@ function renderChats(){
 }
 
 function toggleChat(jid){if(selectedChats.has(jid))selectedChats.delete(jid);else selectedChats.add(jid);renderChats();}
-function selectAll(){filteredChats.forEach(c=>selectedChats.add(c.jid));renderChats();showToast('✅ '+selectedChats.size+' selected!');}
+function selectAll(){filteredChats.forEach(c=>selectedChats.add(c.jid));renderChats();showToast(' '+selectedChats.size+' selected!');}
 function deselectAll(){selectedChats.clear();renderChats();}
 function filterChats(){const q=document.getElementById('chatSearch').value.toLowerCase();filteredChats=allChats.filter(c=>(c.name||'').toLowerCase().includes(q)||c.number.includes(q));renderChats();}
 function updateSelCount(){const el=document.getElementById('selCount');if(el)el.textContent=selectedChats.size+' selected';}
@@ -904,14 +852,14 @@ function updateBcPreview(){const d=parseInt(document.getElementById('bc_delay')?
 
 async function generateMsg(){
     const offer=document.getElementById('offerDetails').value;
-    if(!offer.trim()){showToast('❌ Offer details likho!');return;}
-    const btn=document.getElementById('genBtn');btn.textContent='⏳ Generating...';btn.disabled=true;
+    if(!offer.trim()){showToast(' Offer details likho!');return;}
+    const btn=document.getElementById('genBtn');btn.textContent=' Generating...';btn.disabled=true;
     const personalized=document.getElementById('msgType').value==='personalized';
     try{
         const r=await fetch('/api/generate-message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({offerDetails:offer,customerName:'Dost',personalized})});
         const d=await r.json();
         if(d.success){document.getElementById('msgPreview').value=d.message;document.getElementById('generatedMsg').style.display='block';showToast('✅ Message generated!');}
-    }catch(e){showToast('❌ Error!');}
+    }catch(e){showToast(' Error!');}
     btn.textContent='🤖 AI Se Message Generate Karo';btn.disabled=false;updateBcPreview();
 }
 
@@ -920,17 +868,17 @@ async function sendBroadcast(){
     const offer=document.getElementById('offerDetails').value;
     const personalized=document.getElementById('msgType').value==='personalized';
     const delay=parseInt(document.getElementById('bc_delay').value)||5;
-    if(!msg.trim()&&!offer.trim()){showToast('❌ Pehle message generate karo!');return;}
-    if(selectedChats.size===0){showToast('❌ Contacts select karo!');return;}
-    if(!confirm('📢 '+selectedChats.size+' contacts ko message bhejein?'))return;
+    if(!msg.trim()&&!offer.trim()){showToast(' Pehle message generate karo!');return;}
+    if(selectedChats.size===0){showToast(' Contacts select karo!');return;}
+    if(!confirm(' '+selectedChats.size+' contacts ko message bhejein?'))return;
     const contacts=allChats.filter(c=>selectedChats.has(c.jid)).map(c=>({jid:c.jid,name:c.name||c.number,number:c.number}));
     document.getElementById('bcProgress').style.display='block';
     try{
         const r=await fetch('/api/smart-broadcast',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({offerDetails:offer,baseMessage:msg,personalized,delaySeconds:delay,selectedContacts:contacts})});
         const d=await r.json();
-        if(d.success){showToast('✅ Broadcast shuru! '+contacts.length+' messages jaayenge.');loadData();}
-        else showToast('❌ Error: '+(d.error||''));
-    }catch(e){showToast('❌ Error: '+e.message);}
+        if(d.success){showToast(' Broadcast shuru! '+contacts.length+' messages jaayenge.');loadData();}
+        else showToast(' Error: '+(d.error||''));
+    }catch(e){showToast(' Error: '+e.message);}
 }
 
 function renderBcHistory(){
@@ -971,7 +919,7 @@ function showPage(page){
     document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
     const pageEl=document.getElementById('page-'+page);if(pageEl)pageEl.classList.add('active');
     const navEl=document.getElementById('nav-'+page);if(navEl)navEl.classList.add('active');
-    const titles={orders:'📦 Orders',broadcast:'📢 Smart Broadcast',customers:'👥 Customers',products:'🎨 Products',payment:'💳 Payment',prompt:'🤖 AI Prompt',settings:'⚙️ Settings'};
+    const titles={orders:' Orders',broadcast:' Smart Broadcast',customers:' Customers',products:' Products',payment:'Payment',prompt:'AI Prompt',settings:' Settings'};
     document.getElementById('pageTitle').textContent=titles[page]||page;
     const showStats=['orders'].includes(page);
     document.getElementById('statsGrid').style.display=showStats?'grid':'none';
@@ -998,7 +946,7 @@ setInterval(()=>{if(allData.botStatus==='connected')loadChats();},30000);
 });
 
 server.listen(process.env.PORT || 3000, () => {
-    console.log('🌐 Server ready! /dashboard | /qr');
+    console.log(' Server ready! /dashboard | /qr');
 });
 
 // ─────────────────────────────────────────
@@ -1051,7 +999,7 @@ async function handleMessage(sock, message) {
                     }
                 } else {
                     await sock.sendPresenceUpdate('paused', senderId);
-                    await sock.sendMessage(senderId, { text: '⚠️ Voice samajh nahi aaya. Text mein likhein please! 🙏' });
+                    await sock.sendMessage(senderId, { text: ' Voice samajh nahi aaya. Text mein likhein please! 🙏' });
                 }
             } catch (e) {
                 await sock.sendPresenceUpdate('paused', senderId);
@@ -1127,8 +1075,7 @@ async function startBot() {
         const { version, isLatest } = await fetchLatestBaileysVersion();
         console.log(`📱 WA Version: ${version.join('.')} — Latest: ${isLatest}`);
 
-        // ✅ Upstash se auth load karo — restart pe dobara QR nahi aayega
-        const { state, saveCreds } = await useUpstashAuthState();
+        const { state, saveCreds } = await useMultiFileAuthState('/tmp/auth_info');
 
         // Global store for chats
         globalStore = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
@@ -1172,11 +1119,7 @@ async function startBot() {
 
                 if (code === DisconnectReason.loggedOut) {
                     botStatus = 'logged_out';
-                    console.log('🚪 Logged out — Upstash auth clear kar raha hai...');
-                    try {
-                        await redisSet('wa_creds_v6', null);
-                        await redisSet('wa_keys_v6', {});
-                    } catch (e) {}
+                    try { fs.rmSync('/tmp/auth_info', { recursive: true, force: true }); } catch (e) {}
                     setTimeout(startBot, 5000);
                 } else {
                     botStatus = 'reconnecting';
