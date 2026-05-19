@@ -712,12 +712,12 @@ const server = http.createServer(async (req, res) => {
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:#0a0a0a;color:#e0e0e0;font-family:'Segoe UI',sans-serif;min-height:100vh;}
-.sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:#111;border-right:1px solid #222;padding:20px 0;z-index:100;overflow-y:auto;}
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:#111;border-right:1px solid #222;padding:20px 0;z-index:200;overflow-y:auto;pointer-events:auto;}
 .sidebar-logo{padding:15px 20px 25px;border-bottom:1px solid #222;margin-bottom:10px;}
 .sidebar-logo h2{color:#25D366;font-size:18px;}.sidebar-logo p{color:#666;font-size:11px;margin-top:3px;}
 .nav-item{display:flex;align-items:center;gap:10px;padding:12px 20px;cursor:pointer;color:#aaa;font-size:14px;transition:all 0.2s;border-left:3px solid transparent;}
 .nav-item:hover,.nav-item.active{background:#1a1a1a;color:#25D366;border-left-color:#25D366;}
-.main{margin-left:220px;padding:25px;min-height:100vh;}
+.main{margin-left:220px;width:calc(100% - 220px);padding:25px;min-height:100vh;position:relative;z-index:1;box-sizing:border-box;}
 .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;background:#111;padding:15px 20px;border-radius:12px;border:1px solid #222;flex-wrap:wrap;gap:10px;}
 .topbar h1{font-size:20px;color:white;}
 .bot-badge{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:bold;}
@@ -778,23 +778,23 @@ input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform
 .toast{position:fixed;bottom:20px;right:20px;background:#25D366;color:black;padding:12px 20px;border-radius:10px;font-weight:bold;font-size:14px;z-index:999;display:none;}
 @media(max-width:768px){
 .sidebar{width:60px;}.sidebar-logo p,.nav-item span:last-child{display:none;}
-.nav-item{justify-content:center;}.main{margin-left:60px;padding:15px;}.stats-grid{grid-template-columns:repeat(2,1fr);}
+.nav-item{justify-content:center;}.main{margin-left:60px;width:calc(100% - 60px);padding:15px;}.stats-grid{grid-template-columns:repeat(2,1fr);}
 }
 </style>
 </head>
 <body>
 <div class="sidebar">
 <div class="sidebar-logo"><h2>🏪 Mega</h2><p>Admin Panel</p></div>
-<div class="nav-item active" id="nav-orders" onclick="showPage('orders')"><span>📦</span><span>Orders</span></div>
-<div class="nav-item" id="nav-broadcast" onclick="showPage('broadcast')"><span>📢</span><span>Broadcast</span></div>
-<div class="nav-item" id="nav-customers" onclick="showPage('customers')"><span>👥</span><span>Customers</span></div>
-<div class="nav-item" id="nav-products" onclick="showPage('products')"><span>🎨</span><span>Products</span></div>
-<div class="nav-item" id="nav-payment" onclick="showPage('payment')"><span>💳</span><span>Payment</span></div>
-<div class="nav-item" id="nav-prompt" onclick="showPage('prompt')"><span>🤖</span><span>AI Prompt</span></div>
-<div class="nav-item" id="nav-settings" onclick="showPage('settings')"><span>⚙️</span><span>Settings</span></div>
-<div class="nav-item" onclick="window.location='/qr'"><span>📱</span><span>QR Code</span></div>
-<div class="nav-item" onclick="doResetQr()"><span>🔄</span><span>New QR</span></div>
-<div class="nav-item" onclick="window.location='/logout'"><span>🚪</span><span>Logout</span></div>
+<div class="nav-item active" id="nav-orders" data-page="orders"><span>📦</span><span>Orders</span></div>
+<div class="nav-item" id="nav-broadcast" data-page="broadcast"><span>📢</span><span>Broadcast</span></div>
+<div class="nav-item" id="nav-customers" data-page="customers"><span>👥</span><span>Customers</span></div>
+<div class="nav-item" id="nav-products" data-page="products"><span>🎨</span><span>Products</span></div>
+<div class="nav-item" id="nav-payment" data-page="payment"><span>💳</span><span>Payment</span></div>
+<div class="nav-item" id="nav-prompt" data-page="prompt"><span>🤖</span><span>AI Prompt</span></div>
+<div class="nav-item" id="nav-settings" data-page="settings"><span>⚙️</span><span>Settings</span></div>
+<div class="nav-item" data-href="/qr"><span>📱</span><span>QR Code</span></div>
+<div class="nav-item" data-action="reset-qr"><span>🔄</span><span>New QR</span></div>
+<div class="nav-item" data-href="/logout"><span>🚪</span><span>Logout</span></div>
 </div>
 
 <div class="main">
@@ -1086,27 +1086,50 @@ async function savePrompt(){await fetch('/api/prompt',{method:'POST',headers:{'C
 function renderSettings(){const s=allData.settings||{};document.getElementById('s_bizName').value=s.businessName||'';document.getElementById('s_adminNum').value=s.adminNumber||'';}
 async function saveSettings(){const pw=document.getElementById('s_password').value;const data={businessName:document.getElementById('s_bizName').value,adminNumber:document.getElementById('s_adminNum').value,dashboardPassword:pw||allData.settings?.dashboardPassword};await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});showToast('✅ Settings Saved!');document.getElementById('s_password').value='';}
 
-function showPage(page){
+function showPage(page, el){
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-    const pageEl=document.getElementById('page-'+page);if(pageEl)pageEl.classList.add('active');
-    const navEl=document.getElementById('nav-'+page);if(navEl)navEl.classList.add('active');
+    const pageEl=document.getElementById('page-'+page);
+    if(pageEl) pageEl.classList.add('active');
+    const navEl=el||document.getElementById('nav-'+page);
+    if(navEl) navEl.classList.add('active');
     const titles={orders:'📦 Orders',broadcast:'📢 Smart Broadcast',customers:'👥 Customers',products:'🎨 Products',payment:'💳 Payment',prompt:'🤖 AI Prompt',settings:'⚙️ Settings'};
-    document.getElementById('pageTitle').textContent=titles[page]||page;
-    const showStats=page==='orders';
-    document.getElementById('statsGrid').style.display=showStats?'grid':'none';
-    document.getElementById('revenueCard').style.display=showStats?'block':'none';
-    if(page==='broadcast')loadChats();
+    const titleEl=document.getElementById('pageTitle');
+    if(titleEl) titleEl.textContent=titles[page]||page;
+    const showStats=(page==='orders');
+    const gridEl=document.getElementById('statsGrid');
+    if(gridEl) gridEl.style.display=showStats?'grid':'none';
+    const revEl=document.getElementById('revenueCard');
+    if(revEl) revEl.style.display=showStats?'block':'none';
+    if(page==='broadcast') loadChats();
+    const mainEl=document.querySelector('.main');
+    if(mainEl) mainEl.scrollTop=0;
 }
+
+function initSidebar(){
+    const sidebar=document.querySelector('.sidebar');
+    if(!sidebar) return;
+    sidebar.addEventListener('click',function(e){
+        const item=e.target.closest('.nav-item');
+        if(!item) return;
+        const page=item.getAttribute('data-page');
+        if(page){ showPage(page,item); return; }
+        const href=item.getAttribute('data-href');
+        if(href){ window.location.href=href; return; }
+        if(item.getAttribute('data-action')==='reset-qr') doResetQr();
+    });
+}
+window.showPage=showPage;
 
 function openMsg(jid){document.getElementById('msgJid').value=jid;document.getElementById('msgModal').classList.add('show');}
 function closeModal(){document.getElementById('msgModal').classList.remove('show');}
 async function sendCustomMsg(){const jid=document.getElementById('msgJid').value;const message=document.getElementById('msgText').value;if(!message.trim())return;await fetch('/api/send-message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jid,message})});showToast('✅ Message Sent!');closeModal();document.getElementById('msgText').value='';}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',3000);}
 
+initSidebar();
 loadData();
 setInterval(loadData,15000);
-setInterval(()=>{if(document.getElementById('page-broadcast').classList.contains('active'))loadChats();},30000);
+setInterval(()=>{const p=document.getElementById('page-broadcast');if(p&&p.classList.contains('active'))loadChats();},30000);
 </script>
 </body></html>`);
             return;
