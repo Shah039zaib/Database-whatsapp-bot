@@ -475,234 +475,236 @@ async function getAISalesResponse(userMessage, userId, customerName, lang) {
 // WEB SERVER
 // ─────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
-    const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    const pathname = parsedUrl.pathname;
-    const publicPaths = ['/login', '/qr'];
+    try {
+        const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+        const pathname = parsedUrl.pathname;
+        const publicPaths = ['/login', '/qr'];
 
-    // LOGIN
-    if (pathname === '/login') {
-        if (req.method === 'POST') {
-            const body = await parseBody(req);
-            if (body.password === botData.settings.dashboardPassword) {
-                const sessionId = crypto.randomUUID();
-                sessions[sessionId] = { created: Date.now() };
-                res.writeHead(200, { 'Set-Cookie': `session=${sessionId}; Path=/; HttpOnly; SameSite=Strict`, 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: true }));
-            } else {
-                res.writeHead(401, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: false, message: 'Wrong password!' }));
+        // LOGIN
+        if (pathname === '/login') {
+            if (req.method === 'POST') {
+                const body = await parseBody(req);
+                if (body.password === botData.settings.dashboardPassword) {
+                    const sessionId = crypto.randomUUID();
+                    sessions[sessionId] = { created: Date.now() };
+                    res.writeHead(200, { 'Set-Cookie': `session=${sessionId}; Path=/; HttpOnly; SameSite=Strict`, 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: true }));
+                } else {
+                    res.writeHead(401, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, message: 'Wrong password!' }));
+                }
+                return;
             }
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Login</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#0f0f0f;color:white;font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;}.box{background:#1a1a1a;padding:40px;border-radius:16px;width:90%;max-width:380px;border:1px solid #333;text-align:center;}h1{color:#25D366;font-size:24px;margin-bottom:8px;}p{color:#aaa;font-size:13px;margin-bottom:25px;}input{width:100%;padding:12px 15px;background:#0f0f0f;border:1px solid #333;border-radius:8px;color:white;font-size:15px;margin-bottom:15px;outline:none;}input:focus{border-color:#25D366;}button{width:100%;padding:12px;background:#25D366;border:none;border-radius:8px;color:black;font-size:16px;font-weight:bold;cursor:pointer;}button:hover{background:#1ebe57;}.err{color:#e74c3c;font-size:13px;margin-top:10px;display:none;}</style></head><body><div class="box"><h1>🏪 Mega Agency</h1><p>Admin Dashboard Login</p><input type="password" id="pass" placeholder="Password" onkeypress="if(event.key==='Enter')login()"/><button onclick="login()">🔐 Login</button><div class="err" id="err">❌ Wrong password!</div></div><script>async function login(){const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('pass').value})});const d=await r.json();if(d.success)window.location='/dashboard';else document.getElementById('err').style.display='block';}</script></body></html>`);
             return;
         }
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Login</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#0f0f0f;color:white;font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;}.box{background:#1a1a1a;padding:40px;border-radius:16px;width:90%;max-width:380px;border:1px solid #333;text-align:center;}h1{color:#25D366;font-size:24px;margin-bottom:8px;}p{color:#aaa;font-size:13px;margin-bottom:25px;}input{width:100%;padding:12px 15px;background:#0f0f0f;border:1px solid #333;border-radius:8px;color:white;font-size:15px;margin-bottom:15px;outline:none;}input:focus{border-color:#25D366;}button{width:100%;padding:12px;background:#25D366;border:none;border-radius:8px;color:black;font-size:16px;font-weight:bold;cursor:pointer;}button:hover{background:#1ebe57;}.err{color:#e74c3c;font-size:13px;margin-top:10px;display:none;}</style></head><body><div class="box"><h1>🏪 Mega Agency</h1><p>Admin Dashboard Login</p><input type="password" id="pass" placeholder="Password" onkeypress="if(event.key==='Enter')login()"/><button onclick="login()">🔐 Login</button><div class="err" id="err">❌ Wrong password!</div></div><script>async function login(){const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('pass').value})});const d=await r.json();if(d.success)window.location='/dashboard';else document.getElementById('err').style.display='block';}</script></body></html>`);
-        return;
-    }
 
-    // RESET QR — PUBLIC ENDPOINT
-    if (pathname === '/api/reset-qr' && req.method === 'POST') {
-        console.log('🔄 QR Reset requested...');
-        await clearAllAuth();
-        currentQR = null;
-        botStatus = 'starting';
-        if (sockGlobal) {
-            try { sockGlobal.end(); sockGlobal.ws?.close(); } catch (e) { }
-            sockGlobal = null;
-        }
-        setTimeout(() => startBot(), 3000);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, message: 'Auth cleared! Naya QR aa raha hai...' }));
-        return;
-    }
-
-    // AUTH CHECK
-    if (!publicPaths.includes(pathname) && !isAuthenticated(req)) {
-        res.writeHead(302, { Location: '/login' });
-        res.end();
-        return;
-    }
-
-    // QR PAGE
-    if (pathname === '/qr') {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        const resetScript = `<script>async function resetQr(){if(!confirm('New QR generate karein? Session delete hoga!'))return;const r=await fetch('/api/reset-qr',{method:'POST'});const d=await r.json();if(d.success){alert('✅ Auth cleared! 3 sec mein naya QR...');setTimeout(()=>location.reload(),3500);}}</script>`;
-        const btnStyle = `style="background:#e74c3c;color:white;border:none;padding:10px 22px;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;margin-top:12px;"`;
-
-        if (botStatus === 'connected') {
-            res.end(`<!DOCTYPE html><html><head><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;gap:12px;}h2{color:#25D366;}p{color:#aaa;}a{color:#25D366;font-size:16px;text-decoration:none;}.btn{padding:10px 22px;border:none;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;margin-top:4px;}</style></head><body><h2>✅ Bot Connected!</h2><p>Mega Agency Bot live hai! 🎉</p><a href="/dashboard">📊 Dashboard Kholo</a><button class="btn" style="background:#e74c3c;color:white;" onclick="resetQr()">🔄 Naya QR Generate Karo</button>${resetScript}</body></html>`);
-            return;
-        }
-        if (!currentQR) {
-            res.end(`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="3"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;gap:12px;}h2{color:#f39c12;}p{color:#aaa;}.btn{padding:10px 22px;border:none;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;}</style></head><body><h2>⏳ QR Generate Ho Raha Hai...</h2><p>Status: <b style="color:white">${botStatus}</b></p><p style="color:#666;">Page auto-refresh ho raha hai har 3 sec...</p><button class="btn" style="background:#e74c3c;color:white;" onclick="resetQr()">🔄 Force New QR</button>${resetScript}</body></html>`);
-            return;
-        }
-        try {
-            const qrDataURL = await QRCode.toDataURL(currentQR, { width: 300, margin: 2 });
-            res.end(`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="25"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;padding:20px;gap:10px;}h2{color:#25D366;}img{border:8px solid white;border-radius:12px;width:280px;height:280px;}.steps{background:#222;padding:15px;border-radius:10px;text-align:left;max-width:320px;}p{color:#aaa;}.btn-row{display:flex;gap:10px;justify-content:center;margin-top:5px;}.btn{padding:10px 20px;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;}</style></head><body><h2>📱 WhatsApp QR Code</h2><img src="${qrDataURL}"/><div class="steps"><p>1️⃣ WhatsApp kholo</p><p>2️⃣ 3 dots → Linked Devices</p><p>3️⃣ Link a Device</p><p>4️⃣ QR scan karo</p></div><p style="color:#f39c12;">⚠️ 25 sec mein expire — auto-refresh hoga</p><div class="btn-row"><button class="btn" style="background:#25D366;color:black;" onclick="location.reload()">🔄 Refresh</button><button class="btn" style="background:#e74c3c;color:white;" onclick="resetQr()">🗑️ Naya QR</button></div>${resetScript}</body></html>`);
-        } catch (err) { res.end('<h1 style="color:red">QR Error: ' + err.message + '</h1>'); }
-        return;
-    }
-
-    // CANCEL BROADCAST
-    if (pathname === '/api/cancel-broadcast' && req.method === 'POST') {
-        broadcastCancelled = true;
-        const runningBc = botData.broadcasts?.find(b => b.status === 'running');
-        if (runningBc) { runningBc.status = 'cancelled'; await saveData(); }
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true }));
-        return;
-    }
-
-    // API: GET DATA
-    if (pathname === '/api/data' && req.method === 'GET') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        const ordersArr = Object.values(botData.orders || {});
-        res.end(JSON.stringify({
-            ...botData, botStatus, chatsLoaded, broadcastRunning,
-            stats: {
-                pending: ordersArr.filter(o => o.status === 'pending').length,
-                approved: ordersArr.filter(o => o.status === 'approved').length,
-                rejected: ordersArr.filter(o => o.status === 'rejected').length,
-                total: ordersArr.length,
-                customers: Object.keys(botData.customers || {}).length,
-                existingChats: existingChats.length,
-                revenue: ordersArr.filter(o => o.status === 'approved').reduce((s, o) => {
-                    const pr = botData.products.find(p => p.id === o.productId) || botData.products[0];
-                    return s + (pr?.price || 0);
-                }, 0)
+        // RESET QR — PUBLIC ENDPOINT
+        if (pathname === '/api/reset-qr' && req.method === 'POST') {
+            console.log('🔄 QR Reset requested...');
+            await clearAllAuth();
+            currentQR = null;
+            botStatus = 'starting';
+            if (sockGlobal) {
+                try { sockGlobal.end(); sockGlobal.ws?.close(); } catch (e) { }
+                sockGlobal = null;
             }
-        }));
-        return;
-    }
-
-    // API: GET CHATS
-    if (pathname === '/api/chats' && req.method === 'GET') {
-        if (existingChats.length === 0 && Object.keys(botData.customers || {}).length > 0) {
-            processChatsFromStore();
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ chats: existingChats, loaded: chatsLoaded, count: existingChats.length }));
-        return;
-    }
-
-    // API: GENERATE MESSAGE
-    if (pathname === '/api/generate-message' && req.method === 'POST') {
-        const body = await parseBody(req);
-        try {
-            const msg = await generateBroadcastMessage(body.offerDetails || '', body.customerName || 'Dost', body.personalized || false);
+            setTimeout(() => startBot(), 3000);
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: true, message: msg }));
-        } catch (e) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: e.message }));
-        }
-        return;
-    }
-
-    // API: SMART BROADCAST
-    if (pathname === '/api/smart-broadcast' && req.method === 'POST') {
-        const body = await parseBody(req);
-        if (!body.selectedContacts || body.selectedContacts.length === 0) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: 'Contacts select karo!' }));
+            res.end(JSON.stringify({ success: true, message: 'Auth cleared! Naya QR aa raha hai...' }));
             return;
         }
-        const bc = {
-            id: Date.now(), offerDetails: body.offerDetails || '', baseMessage: body.baseMessage || '',
-            personalized: body.personalized || false, delaySeconds: body.delaySeconds || 5,
-            selectedContacts: body.selectedContacts, status: 'pending', sentCount: 0, failedCount: 0,
-            totalContacts: body.selectedContacts.length, createdAt: Date.now()
-        };
-        if (!botData.broadcasts) botData.broadcasts = [];
-        botData.broadcasts.unshift(bc);
-        if (botData.broadcasts.length > 20) botData.broadcasts = botData.broadcasts.slice(0, 20);
-        await saveData();
-        if (!broadcastRunning) runBroadcast(bc).catch(console.error);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, broadcast: bc }));
-        return;
-    }
 
-    if (pathname === '/api/settings' && req.method === 'POST') {
-        const b = await parseBody(req);
-        if (!b || typeof b !== 'object' || Array.isArray(b)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: 'Invalid data' })); return; }
-        botData.settings = { ...botData.settings, businessName: b.businessName || botData.settings.businessName, adminNumber: b.adminNumber || botData.settings.adminNumber, dashboardPassword: b.dashboardPassword || botData.settings.dashboardPassword, currency: b.currency || botData.settings.currency };
-        await saveData();
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
-    }
-    if (pathname === '/api/payment' && req.method === 'POST') {
-        const b = await parseBody(req);
-        if (!b || typeof b !== 'object' || Array.isArray(b)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: 'Invalid data' })); return; }
-        botData.payment = b; await saveData();
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
-    }
-    if (pathname === '/api/products' && req.method === 'POST') {
-        const b = await parseBody(req);
-        if (!b || !Array.isArray(b)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: 'Invalid data' })); return; }
-        botData.products = b; await saveData();
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
-    }
-    if (pathname === '/api/prompt' && req.method === 'POST') {
-        const b = await parseBody(req);
-        if (!b || typeof b.prompt !== 'string') { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: 'Invalid data' })); return; }
-        botData.aiPrompt = b.prompt; await saveData();
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
-    }
-
-    if (pathname.startsWith('/api/approve/') && req.method === 'POST') {
-        const orderId = parseInt(pathname.split('/api/approve/')[1]);
-        const order = Object.values(botData.orders).find(o => o.orderId === orderId);
-        if (order && sockGlobal) {
-            order.status = 'approved'; await saveData();
-            const product = botData.products.find(p => p.id === order.productId) || botData.products[0];
-            try {
-                let msg = `🎉 *Payment Approved!*\n\nOrder *#${order.orderId}* confirm ho gaya!\n\n📦 *${product.name}*\n\n`;
-                if (product.downloadLink) msg += `⬇️ *Download Link:*\n${product.downloadLink}\n\n`;
-                msg += `Koi bhi help chahiye toh message karo!\nShukriya ${botData.settings.businessName} ko choose karne ka! 🙏`;
-                await sockGlobal.sendMessage(order.customerJid, { text: msg });
-                await saveToSheet({ ...order, product: product.name, amount: product.price, status: 'approved' });
-            } catch (e) { console.log('Approve err:', e.message); }
+        // AUTH CHECK
+        if (!publicPaths.includes(pathname) && !isAuthenticated(req)) {
+            res.writeHead(302, { Location: '/login' });
+            res.end();
+            return;
         }
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
-    }
 
-    if (pathname.startsWith('/api/reject/') && req.method === 'POST') {
-        const orderId = parseInt(pathname.split('/api/reject/')[1]);
-        const order = Object.values(botData.orders).find(o => o.orderId === orderId);
-        if (order && sockGlobal) {
-            order.status = 'rejected'; await saveData();
-            try {
-                await sockGlobal.sendMessage(order.customerJid, { text: `❌ *Payment Verify Nahi Ho Saki*\n\nOrder *#${order.orderId}*\n\nScreenshot sahi nahi tha.\nDobara sahi screenshot bhejo ya admin se contact karo.\n\n"buy" likhkar dobara try karo! 💪` });
-                await saveToSheet({ ...order, status: 'rejected' });
-            } catch (e) { }
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
-    }
+        // QR PAGE
+        if (pathname === '/qr') {
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            const resetScript = `<script>async function resetQr(){if(!confirm('New QR generate karein? Session delete hoga!'))return;const r=await fetch('/api/reset-qr',{method:'POST'});const d=await r.json();if(d.success){alert('✅ Auth cleared! 3 sec mein naya QR...');setTimeout(()=>location.reload(),3500);}}</script>`;
+            const btnStyle = `style="background:#e74c3c;color:white;border:none;padding:10px 22px;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;margin-top:12px;"`;
 
-    if (pathname === '/api/send-message' && req.method === 'POST') {
-        const b = await parseBody(req);
-        if (sockGlobal && b.jid && b.message) {
-            try {
-                await sockGlobal.sendMessage(b.jid, { text: b.message });
-                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true }));
-            } catch (e) {
-                res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: e.message }));
+            if (botStatus === 'connected') {
+                res.end(`<!DOCTYPE html><html><head><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;gap:12px;}h2{color:#25D366;}p{color:#aaa;}a{color:#25D366;font-size:16px;text-decoration:none;}.btn{padding:10px 22px;border:none;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;margin-top:4px;}</style></head><body><h2>✅ Bot Connected!</h2><p>Mega Agency Bot live hai! 🎉</p><a href="/dashboard">📊 Dashboard Kholo</a><button class="btn" style="background:#e74c3c;color:white;" onclick="resetQr()">🔄 Naya QR Generate Karo</button>${resetScript}</body></html>`);
+                return;
             }
-        } else {
-            res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false }));
+            if (!currentQR) {
+                res.end(`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="3"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;gap:12px;}h2{color:#f39c12;}p{color:#aaa;}.btn{padding:10px 22px;border:none;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;}</style></head><body><h2>⏳ QR Generate Ho Raha Hai...</h2><p>Status: <b style="color:white">${botStatus}</b></p><p style="color:#666;">Page auto-refresh ho raha hai har 3 sec...</p><button class="btn" style="background:#e74c3c;color:white;" onclick="resetQr()">🔄 Force New QR</button>${resetScript}</body></html>`);
+                return;
+            }
+            try {
+                const qrDataURL = await QRCode.toDataURL(currentQR, { width: 300, margin: 2 });
+                res.end(`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="25"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;padding:20px;gap:10px;}h2{color:#25D366;}img{border:8px solid white;border-radius:12px;width:280px;height:280px;}.steps{background:#222;padding:15px;border-radius:10px;text-align:left;max-width:320px;}p{color:#aaa;}.btn-row{display:flex;gap:10px;justify-content:center;margin-top:5px;}.btn{padding:10px 20px;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;}</style></head><body><h2>📱 WhatsApp QR Code</h2><img src="${qrDataURL}"/><div class="steps"><p>1️⃣ WhatsApp kholo</p><p>2️⃣ 3 dots → Linked Devices</p><p>3️⃣ Link a Device</p><p>4️⃣ QR scan karo</p></div><p style="color:#f39c12;">⚠️ 25 sec mein expire — auto-refresh hoga</p><div class="btn-row"><button class="btn" style="background:#25D366;color:black;" onclick="location.reload()">🔄 Refresh</button><button class="btn" style="background:#e74c3c;color:white;" onclick="resetQr()">🗑️ Naya QR</button></div>${resetScript}</body></html>`);
+            } catch (err) { res.end('<h1 style="color:red">QR Error: ' + err.message + '</h1>'); }
+            return;
         }
-        return;
-    }
 
-    if (pathname === '/logout') {
-        res.writeHead(302, { 'Set-Cookie': 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT', Location: '/login' });
-        res.end(); return;
-    }
+        // CANCEL BROADCAST
+        if (pathname === '/api/cancel-broadcast' && req.method === 'POST') {
+            broadcastCancelled = true;
+            const runningBc = botData.broadcasts?.find(b => b.status === 'running');
+            if (runningBc) { runningBc.status = 'cancelled'; await saveData(); }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true }));
+            return;
+        }
 
-    // MAIN DASHBOARD
-    if (pathname === '/dashboard' || pathname === '/') {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(`<!DOCTYPE html>
+        // API: GET DATA
+        if (pathname === '/api/data' && req.method === 'GET') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            const ordersArr = Object.values(botData.orders || {});
+            const safeProducts = Array.isArray(botData.products) ? botData.products : [botData.products || {}];
+            res.end(JSON.stringify({
+                ...botData, botStatus, chatsLoaded, broadcastRunning,
+                stats: {
+                    pending: ordersArr.filter(o => o.status === 'pending').length,
+                    approved: ordersArr.filter(o => o.status === 'approved').length,
+                    rejected: ordersArr.filter(o => o.status === 'rejected').length,
+                    total: ordersArr.length,
+                    customers: Object.keys(botData.customers || {}).length,
+                    existingChats: existingChats.length,
+                    revenue: ordersArr.filter(o => o.status === 'approved').reduce((s, o) => {
+                        const pr = safeProducts.find(p => p.id === o.productId) || safeProducts[0];
+                        return s + (pr?.price || 0);
+                    }, 0)
+                }
+            }));
+            return;
+        }
+
+        // API: GET CHATS
+        if (pathname === '/api/chats' && req.method === 'GET') {
+            if (existingChats.length === 0 && Object.keys(botData.customers || {}).length > 0) {
+                processChatsFromStore();
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ chats: existingChats, loaded: chatsLoaded, count: existingChats.length }));
+            return;
+        }
+
+        // API: GENERATE MESSAGE
+        if (pathname === '/api/generate-message' && req.method === 'POST') {
+            const body = await parseBody(req);
+            try {
+                const msg = await generateBroadcastMessage(body.offerDetails || '', body.customerName || 'Dost', body.personalized || false);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, message: msg }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: e.message }));
+            }
+            return;
+        }
+
+        // API: SMART BROADCAST
+        if (pathname === '/api/smart-broadcast' && req.method === 'POST') {
+            const body = await parseBody(req);
+            if (!body.selectedContacts || body.selectedContacts.length === 0) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'Contacts select karo!' }));
+                return;
+            }
+            const bc = {
+                id: Date.now(), offerDetails: body.offerDetails || '', baseMessage: body.baseMessage || '',
+                personalized: body.personalized || false, delaySeconds: body.delaySeconds || 5,
+                selectedContacts: body.selectedContacts, status: 'pending', sentCount: 0, failedCount: 0,
+                totalContacts: body.selectedContacts.length, createdAt: Date.now()
+            };
+            if (!botData.broadcasts) botData.broadcasts = [];
+            botData.broadcasts.unshift(bc);
+            if (botData.broadcasts.length > 20) botData.broadcasts = botData.broadcasts.slice(0, 20);
+            await saveData();
+            if (!broadcastRunning) runBroadcast(bc).catch(console.error);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, broadcast: bc }));
+            return;
+        }
+
+        if (pathname === '/api/settings' && req.method === 'POST') {
+            const b = await parseBody(req);
+            if (!b || typeof b !== 'object' || Array.isArray(b)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: 'Invalid data' })); return; }
+            botData.settings = { ...botData.settings, businessName: b.businessName || botData.settings.businessName, adminNumber: b.adminNumber || botData.settings.adminNumber, dashboardPassword: b.dashboardPassword || botData.settings.dashboardPassword, currency: b.currency || botData.settings.currency };
+            await saveData();
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
+        }
+        if (pathname === '/api/payment' && req.method === 'POST') {
+            const b = await parseBody(req);
+            if (!b || typeof b !== 'object' || Array.isArray(b)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: 'Invalid data' })); return; }
+            botData.payment = b; await saveData();
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
+        }
+        if (pathname === '/api/products' && req.method === 'POST') {
+            const b = await parseBody(req);
+            if (!b || !Array.isArray(b)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: 'Invalid data' })); return; }
+            botData.products = b; await saveData();
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
+        }
+        if (pathname === '/api/prompt' && req.method === 'POST') {
+            const b = await parseBody(req);
+            if (!b || typeof b.prompt !== 'string') { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: 'Invalid data' })); return; }
+            botData.aiPrompt = b.prompt; await saveData();
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
+        }
+
+        if (pathname.startsWith('/api/approve/') && req.method === 'POST') {
+            const orderId = parseInt(pathname.split('/api/approve/')[1]);
+            const order = Object.values(botData.orders).find(o => o.orderId === orderId);
+            if (order && sockGlobal) {
+                order.status = 'approved'; await saveData();
+                const product = botData.products.find(p => p.id === order.productId) || botData.products[0];
+                try {
+                    let msg = `🎉 *Payment Approved!*\n\nOrder *#${order.orderId}* confirm ho gaya!\n\n📦 *${product.name}*\n\n`;
+                    if (product.downloadLink) msg += `⬇️ *Download Link:*\n${product.downloadLink}\n\n`;
+                    msg += `Koi bhi help chahiye toh message karo!\nShukriya ${botData.settings.businessName} ko choose karne ka! 🙏`;
+                    await sockGlobal.sendMessage(order.customerJid, { text: msg });
+                    await saveToSheet({ ...order, product: product.name, amount: product.price, status: 'approved' });
+                } catch (e) { console.log('Approve err:', e.message); }
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
+        }
+
+        if (pathname.startsWith('/api/reject/') && req.method === 'POST') {
+            const orderId = parseInt(pathname.split('/api/reject/')[1]);
+            const order = Object.values(botData.orders).find(o => o.orderId === orderId);
+            if (order && sockGlobal) {
+                order.status = 'rejected'; await saveData();
+                try {
+                    await sockGlobal.sendMessage(order.customerJid, { text: `❌ *Payment Verify Nahi Ho Saki*\n\nOrder *#${order.orderId}*\n\nScreenshot sahi nahi tha.\nDobara sahi screenshot bhejo ya admin se contact karo.\n\n"buy" likhkar dobara try karo! 💪` });
+                    await saveToSheet({ ...order, status: 'rejected' });
+                } catch (e) { }
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
+        }
+
+        if (pathname === '/api/send-message' && req.method === 'POST') {
+            const b = await parseBody(req);
+            if (sockGlobal && b.jid && b.message) {
+                try {
+                    await sockGlobal.sendMessage(b.jid, { text: b.message });
+                    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true }));
+                } catch (e) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: e.message }));
+                }
+            } else {
+                res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false }));
+            }
+            return;
+        }
+
+        if (pathname === '/logout') {
+            res.writeHead(302, { 'Set-Cookie': 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT', Location: '/login' });
+            res.end(); return;
+        }
+
+        // MAIN DASHBOARD
+        if (pathname === '/dashboard' || pathname === '/') {
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(`<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
 <title>${botData.settings.businessName} - Admin</title>
@@ -1107,11 +1109,19 @@ setInterval(loadData,15000);
 setInterval(()=>{if(document.getElementById('page-broadcast').classList.contains('active'))loadChats();},30000);
 </script>
 </body></html>`);
-        return;
-    }
+            return;
+        }
 
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not Found' }));
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not Found' }));
+
+    } catch (err) {
+        console.error('Server Internal Error on ' + req.url, err.message);
+        if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Internal Server Error' }));
+        }
+    }
 });
 
 server.listen(process.env.PORT || 3000, () => {
