@@ -10,6 +10,7 @@
     "@whiskeysockets/baileys": "6.17.16",
     "axios": "^1.6.0",
     "dotenv": "^16.3.1",
+    "form-data": "^4.0.0",
     "pino": "^8.17.0",
     "qrcode": "^1.5.3"
   }
