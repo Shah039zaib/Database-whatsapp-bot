@@ -13,6 +13,7 @@ const pino = require('pino');
 const http = require('http');
 const QRCode = require('qrcode');
 const fs = require('fs');
+const path = require('path');
 const url = require('url');
 
 // ─────────────────────────────────────────
@@ -39,6 +40,63 @@ async function redisSet(key, value) {
         );
         return true;
     } catch (e) { return false; }
+}
+
+// ─────────────────────────────────────────
+// AUTH BACKUP / RESTORE
+// ─────────────────────────────────────────
+const AUTH_DIR = '/tmp/auth_info';
+const AUTH_KEY = 'wa_auth_v3';
+
+async function backupAuthToRedis() {
+    try {
+        if (!fs.existsSync(AUTH_DIR)) return;
+        const files = fs.readdirSync(AUTH_DIR);
+        if (!files.length) return;
+        const authData = {};
+        let totalSize = 0;
+        for (const file of files) {
+            try {
+                const content = fs.readFileSync(path.join(AUTH_DIR, file), 'utf8');
+                authData[file] = content;
+                totalSize += content.length;
+            } catch (e) {}
+        }
+        if (totalSize > 400000) {
+            if (authData['creds.json']) {
+                await redisSet(AUTH_KEY, { 'creds.json': authData['creds.json'] });
+                console.log('⚠️ Auth large — only creds.json backed up');
+            }
+        } else {
+            await redisSet(AUTH_KEY, authData);
+            console.log(`✅ Auth backed up! (${Object.keys(authData).length} files, ~${Math.round(totalSize / 1024)}KB)`);
+        }
+    } catch (e) { console.log('Auth backup error:', e.message); }
+}
+
+async function restoreAuthFromRedis() {
+    try {
+        const authData = await redisGet(AUTH_KEY);
+        if (!authData || typeof authData !== 'object' || !Object.keys(authData).length) {
+            console.log('ℹ️ No auth backup — fresh QR needed');
+            return false;
+        }
+        if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
+        for (const [file, content] of Object.entries(authData)) {
+            if (typeof content === 'string') fs.writeFileSync(path.join(AUTH_DIR, file), content, 'utf8');
+        }
+        console.log(`✅ Auth restored from Redis! (${Object.keys(authData).length} files)`);
+        return true;
+    } catch (e) {
+        console.log('Auth restore error:', e.message);
+        return false;
+    }
+}
+
+async function clearAllAuth() {
+    await redisSet(AUTH_KEY, null);
+    try { fs.rmSync(AUTH_DIR, { recursive: true, force: true }); } catch (e) {}
+    console.log('🗑️ Auth cleared!');
 }
 
 // ─────────────────────────────────────────
@@ -81,7 +139,11 @@ async function initSheet() {
         const token = await getGoogleToken();
         if (!token) return;
         const sheetId = process.env.GOOGLE_SHEET_ID;
-        await axios.post(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:append?valueInputOption=USER_ENTERED`, { values: [['Order ID', 'Customer', 'Phone', 'Product', 'Amount', 'Status', 'Language', 'Date']] }, { headers: { Authorization: `Bearer ${token}` } });
+        await axios.post(
+            `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:append?valueInputOption=USER_ENTERED`,
+            { values: [['Order ID', 'Customer', 'Phone', 'Product', 'Amount', 'Status', 'Language', 'Date']] },
+            { headers: { Authorization: `Bearer ${token}` } }
+        );
     } catch (e) {}
 }
 
@@ -137,38 +199,7 @@ function getDefaultData() {
             features: ['100+ Premium Themes', 'All Niches Covered', 'Fashion, Electronics, Food & More', 'Regular Updates', '24/7 Support', 'Installation Guide', 'Mobile Optimized'],
             downloadLink: '', active: true
         }],
-        aiPrompt: `Tum Mega Agency ke professional AI Sales Agent ho. Tumhara naam "Max" hai.
-
-TUMHARI SERVICE:
-- Product: 100+ Premium Shopify Themes Mega Bundle
-- Price: PKR 999 ONLY (yahi final price hai — koi aur price mat batana)
-- Delivery: Payment approve hone ke 1 hour baad
-- Features: 100+ themes, fashion/electronics/food/all niches, regular updates, installation guide, 24/7 support
-
-LANGUAGE: Customer ki language follow karo (Urdu/Roman Urdu/English)
-
-TUMHARA KAAM:
-1. Customer se warmly greet karo
-2. Unke niche ke baare mein poocho
-3. Value explain karo specifically
-4. Price objections confidently handle karo
-5. Jab customer BUY karna chahe — ORDER_READY likho
-
-PRICE NEGOTIATION — IRON RULE:
-- Discount KABHI NAHI — PKR 999 FINAL HAI
-- "Mehenga hai" → "Ek theme 5000+ ki, 100+ sirf 999 — PKR 10 per theme!"
-- "Kam karo" → "Bhai yeh already lowest — quality se compromise nahi hoga"
-
-SELLING:
-- Value: "Market mein ek theme 5000+ ki hai, 100+ sirf PKR 999"
-- Per unit: "Sirf PKR 10 per theme"
-- FOMO: "Competitors already use kar rahe hain"
-- ROI: "Ek sale se 999 wapas"
-
-RULES:
-- Short replies — 3-4 lines max
-- Friendly emojis
-- ORDER_READY bilkul start mein jab order ho`,
+        aiPrompt: `Tum Mega Agency ke professional AI Sales Agent ho. Tumhara naam "Max" hai.\n\nTUMHARI SERVICE:\n- Product: 100+ Premium Shopify Themes Mega Bundle\n- Price: PKR 999 ONLY (yahi final price hai)\n- Delivery: Payment approve hone ke 1 hour baad\n- Features: 100+ themes, fashion/electronics/food/all niches, regular updates, installation guide, 24/7 support\n\nLANGUAGE: Customer ki language follow karo (Urdu/Roman Urdu/English)\n\nTUMHARA KAAM:\n1. Customer se warmly greet karo\n2. Unke niche ke baare mein poocho\n3. Value explain karo specifically\n4. Price objections confidently handle karo\n5. Jab customer BUY karna chahe — ORDER_READY likho\n\nPRICE NEGOTIATION — IRON RULE:\n- Discount KABHI NAHI — PKR 999 FINAL HAI\n- "Mehenga hai" -> "Ek theme 5000+ ki, 100+ sirf 999 — PKR 10 per theme!"\n- "Kam karo" -> "Bhai yeh already lowest — quality se compromise nahi hoga"\n\nSELLING:\n- Value: "Market mein ek theme 5000+ ki hai, 100+ sirf PKR 999"\n- Per unit: "Sirf PKR 10 per theme"\n- FOMO: "Competitors already use kar rahe hain"\n- ROI: "Ek sale se 999 wapas"\n\nRULES:\n- Short replies — 3-4 lines max\n- Friendly emojis\n- ORDER_READY bilkul start mein jab order ho`,
         broadcasts: [],
         orders: {},
         customers: {},
@@ -178,10 +209,8 @@ RULES:
 
 let botData = getDefaultData();
 
-// Load from Upstash first, fallback to local file
 async function loadData() {
     try {
-        // Try Upstash first
         const saved = await redisGet(DATA_KEY);
         if (saved) {
             botData = { ...getDefaultData(), ...saved };
@@ -190,7 +219,6 @@ async function loadData() {
             console.log('✅ Data loaded from Upstash!');
             return;
         }
-        // Fallback to local file
         if (fs.existsSync(DATA_FILE)) {
             const saved2 = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
             botData = { ...getDefaultData(), ...saved2 };
@@ -201,7 +229,6 @@ async function loadData() {
     } catch (e) { console.log('Load error:', e.message); }
 }
 
-// Save to both Upstash and local file
 async function saveData() {
     try {
         await redisSet(DATA_KEY, botData);
@@ -220,9 +247,11 @@ let sockGlobal = null;
 const salesHistory = {};
 const sessions = {};
 let broadcastRunning = false;
+let broadcastCancelled = false;
 let existingChats = [];
 let chatsLoaded = false;
 let globalStore = null;
+let botRestartCount = 0;
 
 function isAuthenticated(req) {
     const cookies = req.headers.cookie || '';
@@ -240,31 +269,49 @@ async function parseBody(req) {
 }
 
 // ─────────────────────────────────────────
-// CHATS PROCESSING
+// CHATS — SIRF CUSTOMERS (MY CONTACTS NAHI)
 // ─────────────────────────────────────────
 function processChatsFromStore() {
     try {
-        if (!globalStore) { chatsLoaded = true; return; }
-        const chats = globalStore.chats.all();
+        const customerJids = new Set(Object.keys(botData.customers || {}));
         const newChats = [];
-        for (const chat of chats) {
-            if (!chat.id) continue;
-            if (chat.id.endsWith('@g.us')) continue;
-            if (chat.id.endsWith('@broadcast')) continue;
-            if (chat.id === 'status@broadcast') continue;
-            if (chat.id.includes('newsletter')) continue;
-            const number = chat.id.replace('@s.whatsapp.net', '');
+        const addedJids = new Set();
+
+        if (globalStore) {
+            const chats = globalStore.chats.all();
+            for (const chat of chats) {
+                if (!chat.id) continue;
+                if (chat.id.endsWith('@g.us')) continue;
+                if (chat.id.endsWith('@broadcast')) continue;
+                if (chat.id === 'status@broadcast') continue;
+                if (chat.id.includes('newsletter')) continue;
+                if (!customerJids.has(chat.id)) continue;
+                const number = chat.id.replace('@s.whatsapp.net', '');
+                if (number.length < 10) continue;
+                addedJids.add(chat.id);
+                newChats.push({
+                    jid: chat.id, number,
+                    name: chat.name || chat.pushName || botData.customers[chat.id]?.name || number,
+                    lastMessage: chat.conversationTimestamp || 0
+                });
+            }
+        }
+
+        for (const [jid, customer] of Object.entries(botData.customers || {})) {
+            if (addedJids.has(jid)) continue;
+            const number = jid.replace('@s.whatsapp.net', '');
             if (number.length < 10) continue;
             newChats.push({
-                jid: chat.id, number,
-                name: chat.name || chat.pushName || number,
-                lastMessage: chat.conversationTimestamp || 0
+                jid, number,
+                name: customer.name || number,
+                lastMessage: customer.lastSeen || 0
             });
         }
+
         newChats.sort((a, b) => b.lastMessage - a.lastMessage);
         existingChats = newChats;
         chatsLoaded = true;
-        console.log(`✅ ${newChats.length} chats processed!`);
+        console.log(`✅ ${newChats.length} customer chats loaded!`);
     } catch (e) {
         console.log('Chat process error:', e.message);
         chatsLoaded = true;
@@ -300,6 +347,7 @@ async function generateBroadcastMessage(offerDetails, customerName, personalized
 async function runBroadcast(broadcast) {
     if (!sockGlobal) return;
     broadcastRunning = true;
+    broadcastCancelled = false;
     const targets = broadcast.selectedContacts || [];
     let sent = 0, failed = 0;
     broadcast.status = 'running';
@@ -308,6 +356,11 @@ async function runBroadcast(broadcast) {
     await saveData();
 
     for (const contact of targets) {
+        if (broadcastCancelled) {
+            broadcast.status = 'cancelled';
+            console.log('🛑 Broadcast cancelled!');
+            break;
+        }
         try {
             let message = broadcast.baseMessage;
             if (broadcast.personalized && broadcast.offerDetails) {
@@ -323,7 +376,8 @@ async function runBroadcast(broadcast) {
             broadcast.failedCount = failed;
         }
     }
-    broadcast.status = 'completed';
+
+    if (!broadcastCancelled) broadcast.status = 'completed';
     broadcast.completedAt = Date.now();
     await saveData();
     broadcastRunning = false;
@@ -335,24 +389,7 @@ async function runBroadcast(broadcast) {
 // ─────────────────────────────────────────
 function getPaymentMessage(orderId, product, lang) {
     const p = botData.payment;
-    const details = `━━━━━━━━━━━━━━━━━━━━
-💳 *Payment — ${botData.settings.currency} ${product.price}*
-
-📱 *EasyPaisa:*
-Number: ${p.easypaisa.number}
-Name: ${p.easypaisa.name}
-
-📱 *JazzCash:*
-Number: ${p.jazzcash.number}
-Name: ${p.jazzcash.name}
-
-🏦 *Bank Transfer:*
-Bank: ${p.bank.bankName}
-Account: ${p.bank.accountNumber}
-Name: ${p.bank.accountName}
-IBAN: ${p.bank.iban}
-━━━━━━━━━━━━━━━━━━━━`;
-
+    const details = `━━━━━━━━━━━━━━━━━━━━\n💳 *Payment — ${botData.settings.currency} ${product.price}*\n\n📱 *EasyPaisa:*\nNumber: ${p.easypaisa.number}\nName: ${p.easypaisa.name}\n\n📱 *JazzCash:*\nNumber: ${p.jazzcash.number}\nName: ${p.jazzcash.name}\n\n🏦 *Bank Transfer:*\nBank: ${p.bank.bankName}\nAccount: ${p.bank.accountNumber}\nName: ${p.bank.accountName}\nIBAN: ${p.bank.iban}\n━━━━━━━━━━━━━━━━━━━━`;
     if (lang === 'urdu') return `🛒 *آرڈر کنفرم! #${orderId}*\n\n${details}\n\n✅ پیمنٹ کے بعد اسکرین شاٹ بھیجیں\n⏳ 1 گھنٹے میں ڈلیوری!`;
     if (lang === 'roman_urdu') return `🛒 *Order Confirmed! #${orderId}*\nProduct: *${product.name}*\n\n${details}\n\n✅ Payment ke baad *screenshot* bhejo\n📦 1 hour mein delivery guaranteed!`;
     return `🛒 *Order Confirmed! #${orderId}*\nProduct: *${product.name}*\n\n${details}\n\n✅ Send screenshot after payment\n📦 Delivery within 1 hour!`;
@@ -391,13 +428,11 @@ async function getAISalesResponse(userMessage, userId, customerName, lang) {
             const headers = provider === 'groq'
                 ? { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' }
                 : { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://mega-agency.com', 'X-Title': 'Mega Agency' };
-
             const response = await axios.post(apiUrl, {
                 model,
                 messages: [{ role: 'system', content: systemPrompt }, ...salesHistory[userId]],
                 max_tokens: 350, temperature: 0.85
             }, { headers, timeout: 15000 });
-
             const aiMessage = response.data.choices[0].message.content;
             salesHistory[userId].push({ role: 'assistant', content: aiMessage });
             const shouldOrder = aiMessage.toUpperCase().includes('ORDER_READY');
@@ -420,6 +455,7 @@ async function getAISalesResponse(userMessage, userId, customerName, lang) {
 const server = http.createServer(async (req, res) => {
     const parsedUrl = url.parse(req.url, true);
     const pathname = parsedUrl.pathname;
+    const publicPaths = ['/login', '/qr', '/api/reset-qr'];
 
     // LOGIN
     if (pathname === '/login') {
@@ -441,8 +477,24 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // RESET QR — PUBLIC ENDPOINT
+    if (pathname === '/api/reset-qr' && req.method === 'POST') {
+        console.log('🔄 QR Reset requested...');
+        await clearAllAuth();
+        currentQR = null;
+        botStatus = 'starting';
+        if (sockGlobal) {
+            try { sockGlobal.end(); sockGlobal.ws?.close(); } catch (e) {}
+            sockGlobal = null;
+        }
+        setTimeout(() => startBot(), 3000);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Auth cleared! Naya QR aa raha hai...' }));
+        return;
+    }
+
     // AUTH CHECK
-    if (pathname !== '/qr' && pathname !== '/login' && !isAuthenticated(req)) {
+    if (!publicPaths.includes(pathname) && !isAuthenticated(req)) {
         res.writeHead(302, { Location: '/login' });
         res.end();
         return;
@@ -451,18 +503,32 @@ const server = http.createServer(async (req, res) => {
     // QR PAGE
     if (pathname === '/qr') {
         res.writeHead(200, { 'Content-Type': 'text/html' });
+        const resetScript = `<script>async function resetQr(){if(!confirm('New QR generate karein? Session delete hoga!'))return;const r=await fetch('/api/reset-qr',{method:'POST'});const d=await r.json();if(d.success){alert('✅ Auth cleared! 3 sec mein naya QR...');setTimeout(()=>location.reload(),3500);}}</script>`;
+        const btnStyle = `style="background:#e74c3c;color:white;border:none;padding:10px 22px;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;margin-top:12px;"`;
+
         if (botStatus === 'connected') {
-            res.end(`<html><head><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;}h2{color:#25D366;}a{color:#25D366;font-size:18px;margin-top:20px;display:block;}p{color:#aaa;}</style></head><body><h2>✅ Bot Connected!</h2><p>Mega Agency Bot live hai!</p><a href="/dashboard">📊 Dashboard Kholo</a></body></html>`);
+            res.end(`<!DOCTYPE html><html><head><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;gap:12px;}h2{color:#25D366;}p{color:#aaa;}a{color:#25D366;font-size:16px;text-decoration:none;}.btn{padding:10px 22px;border:none;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;margin-top:4px;}</style></head><body><h2>✅ Bot Connected!</h2><p>Mega Agency Bot live hai! 🎉</p><a href="/dashboard">📊 Dashboard Kholo</a><button class="btn" style="background:#e74c3c;color:white;" onclick="resetQr()">🔄 Naya QR Generate Karo</button>${resetScript}</body></html>`);
             return;
         }
         if (!currentQR) {
-            res.end(`<html><head><meta http-equiv="refresh" content="3"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;}h2{color:#f39c12;}p{color:#aaa;}</style></head><body><h2>⏳ QR Generate Ho Raha Hai...</h2><p>Status: ${botStatus}</p></body></html>`);
+            res.end(`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="3"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;gap:12px;}h2{color:#f39c12;}p{color:#aaa;}.btn{padding:10px 22px;border:none;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;}</style></head><body><h2>⏳ QR Generate Ho Raha Hai...</h2><p>Status: <b style="color:white">${botStatus}</b></p><p style="color:#666;">Page auto-refresh ho raha hai har 3 sec...</p><button class="btn" style="background:#e74c3c;color:white;" onclick="resetQr()">🔄 Force New QR</button>${resetScript}</body></html>`);
             return;
         }
         try {
             const qrDataURL = await QRCode.toDataURL(currentQR, { width: 300, margin: 2 });
-            res.end(`<html><head><meta http-equiv="refresh" content="25"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;padding:20px;}h2{color:#25D366;}img{border:8px solid white;border-radius:12px;width:280px;height:280px;}.steps{background:#222;padding:15px;border-radius:10px;text-align:left;max-width:320px;margin-top:15px;}p{color:#aaa;}</style></head><body><h2>📱 WhatsApp QR Code</h2><img src="${qrDataURL}"/><div class="steps"><p>1️⃣ WhatsApp kholo</p><p>2️⃣ 3 dots → Linked Devices</p><p>3️⃣ Link a Device</p><p>4️⃣ QR scan karo</p></div><p style="color:#f39c12;margin-top:15px">⚠️ 25 sec mein expire!</p></body></html>`);
+            res.end(`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="25"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;padding:20px;gap:10px;}h2{color:#25D366;}img{border:8px solid white;border-radius:12px;width:280px;height:280px;}.steps{background:#222;padding:15px;border-radius:10px;text-align:left;max-width:320px;}p{color:#aaa;}.btn-row{display:flex;gap:10px;justify-content:center;margin-top:5px;}.btn{padding:10px 20px;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;}</style></head><body><h2>📱 WhatsApp QR Code</h2><img src="${qrDataURL}"/><div class="steps"><p>1️⃣ WhatsApp kholo</p><p>2️⃣ 3 dots → Linked Devices</p><p>3️⃣ Link a Device</p><p>4️⃣ QR scan karo</p></div><p style="color:#f39c12;">⚠️ 25 sec mein expire — auto-refresh hoga</p><div class="btn-row"><button class="btn" style="background:#25D366;color:black;" onclick="location.reload()">🔄 Refresh</button><button class="btn" style="background:#e74c3c;color:white;" onclick="resetQr()">🗑️ Naya QR</button></div>${resetScript}</body></html>`);
         } catch (err) { res.end('<h1 style="color:red">QR Error: ' + err.message + '</h1>'); }
+        return;
+    }
+
+    // CANCEL BROADCAST
+    if (pathname === '/api/cancel-broadcast' && req.method === 'POST') {
+        broadcastCancelled = true;
+        broadcastRunning = false;
+        const runningBc = botData.broadcasts?.find(b => b.status === 'running');
+        if (runningBc) { runningBc.status = 'cancelled'; await saveData(); }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
         return;
     }
 
@@ -471,7 +537,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         const ordersArr = Object.values(botData.orders || {});
         res.end(JSON.stringify({
-            ...botData, botStatus, chatsLoaded,
+            ...botData, botStatus, chatsLoaded, broadcastRunning,
             stats: {
                 pending: ordersArr.filter(o => o.status === 'pending').length,
                 approved: ordersArr.filter(o => o.status === 'approved').length,
@@ -490,6 +556,9 @@ const server = http.createServer(async (req, res) => {
 
     // API: GET CHATS
     if (pathname === '/api/chats' && req.method === 'GET') {
+        if (existingChats.length === 0 && Object.keys(botData.customers || {}).length > 0) {
+            processChatsFromStore();
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ chats: existingChats, loaded: chatsLoaded, count: existingChats.length }));
         return;
@@ -517,7 +586,12 @@ const server = http.createServer(async (req, res) => {
             res.end(JSON.stringify({ success: false, error: 'Contacts select karo!' }));
             return;
         }
-        const bc = { id: Date.now(), offerDetails: body.offerDetails || '', baseMessage: body.baseMessage || '', personalized: body.personalized || false, delaySeconds: body.delaySeconds || 5, selectedContacts: body.selectedContacts, status: 'pending', sentCount: 0, failedCount: 0, totalContacts: body.selectedContacts.length, createdAt: Date.now() };
+        const bc = {
+            id: Date.now(), offerDetails: body.offerDetails || '', baseMessage: body.baseMessage || '',
+            personalized: body.personalized || false, delaySeconds: body.delaySeconds || 5,
+            selectedContacts: body.selectedContacts, status: 'pending', sentCount: 0, failedCount: 0,
+            totalContacts: body.selectedContacts.length, createdAt: Date.now()
+        };
         if (!botData.broadcasts) botData.broadcasts = [];
         botData.broadcasts.unshift(bc);
         if (botData.broadcasts.length > 20) botData.broadcasts = botData.broadcasts.slice(0, 20);
@@ -528,10 +602,22 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    if (pathname === '/api/settings' && req.method === 'POST') { const b = await parseBody(req); botData.settings = { ...botData.settings, ...b }; await saveData(); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return; }
-    if (pathname === '/api/payment' && req.method === 'POST') { const b = await parseBody(req); botData.payment = b; await saveData(); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return; }
-    if (pathname === '/api/products' && req.method === 'POST') { const b = await parseBody(req); botData.products = b; await saveData(); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return; }
-    if (pathname === '/api/prompt' && req.method === 'POST') { const b = await parseBody(req); botData.aiPrompt = b.prompt; await saveData(); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return; }
+    if (pathname === '/api/settings' && req.method === 'POST') {
+        const b = await parseBody(req); botData.settings = { ...botData.settings, ...b }; await saveData();
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
+    }
+    if (pathname === '/api/payment' && req.method === 'POST') {
+        const b = await parseBody(req); botData.payment = b; await saveData();
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
+    }
+    if (pathname === '/api/products' && req.method === 'POST') {
+        const b = await parseBody(req); botData.products = b; await saveData();
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
+    }
+    if (pathname === '/api/prompt' && req.method === 'POST') {
+        const b = await parseBody(req); botData.aiPrompt = b.prompt; await saveData();
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
+    }
 
     if (pathname.startsWith('/api/approve/') && req.method === 'POST') {
         const orderId = parseInt(pathname.split('/api/approve/')[1]);
@@ -566,13 +652,22 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/send-message' && req.method === 'POST') {
         const b = await parseBody(req);
         if (sockGlobal && b.jid && b.message) {
-            try { await sockGlobal.sendMessage(b.jid, { text: b.message }); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); }
-            catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: e.message })); }
-        } else { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false })); }
+            try {
+                await sockGlobal.sendMessage(b.jid, { text: b.message });
+                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: e.message }));
+            }
+        } else {
+            res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false }));
+        }
         return;
     }
 
-    if (pathname === '/logout') { res.writeHead(302, { 'Set-Cookie': 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT', Location: '/login' }); res.end(); return; }
+    if (pathname === '/logout') {
+        res.writeHead(302, { 'Set-Cookie': 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT', Location: '/login' });
+        res.end(); return;
+    }
 
     // MAIN DASHBOARD
     if (pathname === '/dashboard' || pathname === '/') {
@@ -599,21 +694,21 @@ body{background:#0a0a0a;color:#e0e0e0;font-family:'Segoe UI',sans-serif;min-heig
 .stat-card{background:#111;border-radius:12px;padding:18px;text-align:center;border:1px solid #222;}
 .stat-card h2{font-size:28px;font-weight:bold;margin-bottom:4px;}.stat-card p{color:#666;font-size:11px;}
 .section{background:#111;border-radius:12px;border:1px solid #222;margin-bottom:20px;overflow:hidden;}
-.section-header{padding:15px 20px;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center;}
+.section-header{padding:15px 20px;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
 .section-header h3{font-size:15px;color:white;}.section-body{padding:18px;}
 .order-card{background:#0f0f0f;border-radius:10px;padding:14px;margin-bottom:10px;border:1px solid #222;}
-.order-card.pending{border-left:4px solid #f39c12;}.order-card.approved{border-left:4px solid #25D366;}.order-card.rejected{border-left:4px solid #e74c3c;}
-.order-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.order-card.pending{border-left:4px solid #f39c12;}.order-card.approved{border-left:4px solid #25D366;}.order-card.rejected{border-left:4px solid #e74c3c;}.order-card.cancelled{border-left:4px solid #9b59b6;}.order-card.running{border-left:4px solid #3498db;}
+.order-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;}
 .order-id{font-weight:bold;color:#25D366;font-size:15px;}
 .badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:bold;}
-.bp{background:#f39c12;color:black;}.ba{background:#25D366;color:black;}.br{background:#e74c3c;color:white;}
+.bp{background:#f39c12;color:black;}.ba{background:#25D366;color:black;}.br{background:#e74c3c;color:white;}.bc{background:#9b59b6;color:white;}
 .order-info{font-size:13px;color:#aaa;line-height:1.9;}.order-info b{color:white;}
 .btn-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
 .btn{padding:7px 16px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;text-decoration:none;display:inline-block;}
-.btn-green{background:#25D366;color:black;}.btn-red{background:#e74c3c;color:white;}.btn-blue{background:#3498db;color:white;}.btn-gray{background:#333;color:white;}.btn-purple{background:#9b59b6;color:white;}
+.btn-green{background:#25D366;color:black;}.btn-red{background:#e74c3c;color:white;}.btn-blue{background:#3498db;color:white;}.btn-gray{background:#333;color:white;}.btn-purple{background:#9b59b6;color:white;}.btn-orange{background:#f39c12;color:black;}
 .form-group{margin-bottom:15px;}.form-group label{display:block;color:#aaa;font-size:13px;margin-bottom:6px;}
 .form-group input,.form-group textarea,.form-group select{width:100%;padding:10px 14px;background:#0f0f0f;border:1px solid #333;border-radius:8px;color:white;font-size:14px;outline:none;}
-.form-group input:focus,.form-group textarea:focus{border-color:#25D366;}
+.form-group input:focus,.form-group textarea:focus,.form-group select:focus{border-color:#25D366;}
 .form-group textarea{resize:vertical;min-height:100px;font-family:'Segoe UI',sans-serif;}
 .save-btn{background:#25D366;color:black;border:none;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;}
 .product-card{background:#0f0f0f;border-radius:10px;padding:16px;margin-bottom:12px;border:1px solid #222;}
@@ -634,6 +729,7 @@ input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform
 .revenue-card h2{color:#f39c12;font-size:32px;font-weight:bold;}
 .info-box{background:#1a2b1a;border:1px solid #25D36640;border-radius:8px;padding:12px 15px;margin-bottom:15px;font-size:13px;color:#25D366;}
 .warn-box{background:#2b1a0d;border:1px solid #f39c1240;border-radius:8px;padding:12px 15px;margin-bottom:15px;font-size:13px;color:#f39c12;}
+.danger-box{background:#2b0d0d;border:1px solid #e74c3c40;border-radius:8px;padding:15px;margin-top:20px;}
 .chat-item{background:#0f0f0f;border-radius:8px;padding:10px 14px;margin-bottom:6px;border:1px solid #222;display:flex;align-items:center;gap:10px;cursor:pointer;}
 .chat-item:hover{background:#1a1a1a;}.chat-item.selected{border-color:#25D366;background:#0d2b0d;}
 .chat-avatar{width:36px;height:36px;border-radius:50%;background:#25D36633;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
@@ -648,160 +744,175 @@ input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform
 .msg-box h3{margin-bottom:15px;color:white;}
 .toast{position:fixed;bottom:20px;right:20px;background:#25D366;color:black;padding:12px 20px;border-radius:10px;font-weight:bold;font-size:14px;z-index:999;display:none;}
 @media(max-width:768px){
-.sidebar{width:60px;}.sidebar-logo p,.nav-item span+span{display:none;}
+.sidebar{width:60px;}.sidebar-logo p,.nav-item span:last-child{display:none;}
 .nav-item{justify-content:center;}.main{margin-left:60px;padding:15px;}.stats-grid{grid-template-columns:repeat(2,1fr);}
 }
 </style>
 </head>
 <body>
 <div class="sidebar">
-<div class="sidebar-logo"><h2> Mega</h2><p>Admin Panel</p></div>
-<div class="nav-item active" id="nav-orders" onclick="showPage('orders')"><span>📦</span><span> Orders</span></div>
-<div class="nav-item" id="nav-broadcast" onclick="showPage('broadcast')"><span>📢</span><span> Broadcast</span></div>
-<div class="nav-item" id="nav-customers" onclick="showPage('customers')"><span>👥</span><span> Customers</span></div>
-<div class="nav-item" id="nav-products" onclick="showPage('products')"><span>🎨</span><span> Products</span></div>
-<div class="nav-item" id="nav-payment" onclick="showPage('payment')"><span>💳</span><span> Payment</span></div>
-<div class="nav-item" id="nav-prompt" onclick="showPage('prompt')"><span>🤖</span><span> AI Prompt</span></div>
-<div class="nav-item" id="nav-settings" onclick="showPage('settings')"><span>⚙️</span><span> Settings</span></div>
-<div class="nav-item" onclick="window.location='/qr'"><span>📱</span><span> QR Code</span></div>
-<div class="nav-item" onclick="window.location='/logout'"><span>🚪</span><span> Logout</span></div>
+<div class="sidebar-logo"><h2>🏪 Mega</h2><p>Admin Panel</p></div>
+<div class="nav-item active" id="nav-orders" onclick="showPage('orders')"><span>📦</span><span>Orders</span></div>
+<div class="nav-item" id="nav-broadcast" onclick="showPage('broadcast')"><span>📢</span><span>Broadcast</span></div>
+<div class="nav-item" id="nav-customers" onclick="showPage('customers')"><span>👥</span><span>Customers</span></div>
+<div class="nav-item" id="nav-products" onclick="showPage('products')"><span>🎨</span><span>Products</span></div>
+<div class="nav-item" id="nav-payment" onclick="showPage('payment')"><span>💳</span><span>Payment</span></div>
+<div class="nav-item" id="nav-prompt" onclick="showPage('prompt')"><span>🤖</span><span>AI Prompt</span></div>
+<div class="nav-item" id="nav-settings" onclick="showPage('settings')"><span>⚙️</span><span>Settings</span></div>
+<div class="nav-item" onclick="window.location='/qr'"><span>📱</span><span>QR Code</span></div>
+<div class="nav-item" onclick="doResetQr()"><span>🔄</span><span>New QR</span></div>
+<div class="nav-item" onclick="window.location='/logout'"><span>🚪</span><span>Logout</span></div>
 </div>
 
 <div class="main">
 <div class="topbar">
-<h1 id="pageTitle"> Orders</h1>
+<h1 id="pageTitle">📦 Orders</h1>
 <div style="display:flex;gap:10px;align-items:center;">
-<span class="bot-badge" id="botBadge">Loading...</span>
-<button class="btn btn-gray" onclick="loadData()" style="padding:6px 12px;font-size:12px;">🔄reload</button>
+<span class="bot-badge" id="botBadge">⏳ Loading...</span>
+<button class="btn btn-gray" onclick="loadData()" style="padding:6px 12px;font-size:12px;">🔄 Reload</button>
 </div></div>
 
 <div class="stats-grid" id="statsGrid"></div>
-<div class="revenue-card" id="revenueCard"><p> Total Revenue</p><h2 id="revenue">PKR 0</h2><p id="revenueDetail">0 orders approved</p></div>
+<div class="revenue-card" id="revenueCard"><p>💰 Total Revenue</p><h2 id="revenue">PKR 0</h2><p id="revenueDetail">0 orders approved</p></div>
 
 <!-- ORDERS -->
 <div class="page active" id="page-orders">
-<div class="section"><div class="section-header"><h3> Pending Orders</h3></div><div class="section-body" id="pendingOrders"><div class="empty">Loading...</div></div></div>
-<div class="section"><div class="section-header"><h3> Approved Orders</h3></div><div class="section-body" id="approvedOrders"><div class="empty">Loading...</div></div></div>
-<div class="section"><div class="section-header"><h3> Rejected Orders</h3></div><div class="section-body" id="rejectedOrders"><div class="empty">Loading...</div></div></div>
+<div class="section"><div class="section-header"><h3>⏳ Pending Orders</h3></div><div class="section-body" id="pendingOrders"><div class="empty">Loading...</div></div></div>
+<div class="section"><div class="section-header"><h3>✅ Approved Orders</h3></div><div class="section-body" id="approvedOrders"><div class="empty">Loading...</div></div></div>
+<div class="section"><div class="section-header"><h3>❌ Rejected Orders</h3></div><div class="section-body" id="rejectedOrders"><div class="empty">Loading...</div></div></div>
 </div>
 
 <!-- BROADCAST -->
 <div class="page" id="page-broadcast">
-<div class="section"><div class="section-header"><h3>AI Message Generator</h3></div><div class="section-body">
-<div class="info-box"> AI tumhara offer message generate karega</div>
-<div class="form-group"><label>Offer Details (AI ko batao)</label><textarea id="offerDetails" rows="3" placeholder="e.g. 100+ Shopify themes bundle sirf PKR 999 mein — limited time offer!"></textarea></div>
+<div class="section"><div class="section-header"><h3>🤖 AI Message Generator</h3></div><div class="section-body">
+<div class="info-box">🤖 AI tumhara offer message generate karega automatically!</div>
+<div class="form-group"><label>Offer Details (AI ko batao kya offer hai)</label><textarea id="offerDetails" rows="3" placeholder="e.g. 100+ Shopify themes bundle sirf PKR 999 mein — limited time offer!"></textarea></div>
 <div class="form-group"><label>Message Type</label>
-<select id="msgType"><option value="personalized"> Personalized (har customer ke naam se)</option><option value="same"> Same message sab ko</option></select></div>
-<button class="btn btn-purple" onclick="generateMsg()" id="genBtn"> AI Se Message Generate Karo</button>
+<select id="msgType"><option value="personalized">👤 Personalized (har customer ke naam se)</option><option value="same">📢 Same message sab ko</option></select></div>
+<button class="btn btn-purple" onclick="generateMsg()" id="genBtn">🤖 AI Se Message Generate Karo</button>
 <div id="generatedMsg" style="display:none;margin-top:15px;">
-<div class="form-group"><label>Generated Message (edit kar sakte ho)</label><textarea id="msgPreview" rows="6"></textarea></div>
+<div class="form-group"><label>✏️ Generated Message (edit kar sakte ho)</label><textarea id="msgPreview" rows="6"></textarea></div>
 </div>
 </div></div>
 
 <div class="section"><div class="section-header">
-<h3> Contacts Select Karo</h3>
+<h3>👥 Customers Select Karo</h3>
 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-<button class="btn btn-green" onclick="selectAll()"> Select All</button>
-<button class="btn btn-gray" onclick="deselectAll()"> Deselect</button>
-<span id="selCount" style="color:#25D366;font-size:13px;"></span>
+<button class="btn btn-green" onclick="selectAll()">✅ Select All</button>
+<button class="btn btn-gray" onclick="deselectAll()">❌ Deselect</button>
+<span id="selCount" style="color:#25D366;font-size:13px;font-weight:bold;"></span>
 </div>
 </div><div class="section-body">
 <div style="margin-bottom:12px;">
-<div class="form-group"><label>Delay Between Messages (seconds)</label><input type="number" id="bc_delay" value="5" min="1" max="60"/></div>
-<input type="text" id="chatSearch" placeholder="🔍 Search contacts..." oninput="filterChats()" style="width:100%;padding:10px;background:#0f0f0f;border:1px solid #333;border-radius:8px;color:white;outline:none;"/>
+<div class="form-group"><label>⏱️ Delay Between Messages (seconds)</label><input type="number" id="bc_delay" value="5" min="1" max="60" onchange="updateBcPreview()"/></div>
+<input type="text" id="chatSearch" placeholder="🔍 Search customers..." oninput="filterChats()" style="width:100%;padding:10px;background:#0f0f0f;border:1px solid #333;border-radius:8px;color:white;outline:none;margin-bottom:8px;"/>
 </div>
-<div id="chatStatus" style="text-align:center;color:#25D366;padding:20px;font-size:14px;"> Bot connect hone ke baad contacts load honge...</div>
+<div id="chatStatus" style="text-align:center;color:#25D366;padding:20px;font-size:14px;">🔌 Bot connect hone ke baad customers load honge...</div>
 <div id="chatsList"></div>
 </div></div>
 
-<div class="section"><div class="section-header"><h3> Send Broadcast</h3></div><div class="section-body">
-<div id="bcPreview" style="color:#aaa;font-size:13px;margin-bottom:15px;"></div>
-<button class="btn btn-green" onclick="sendBroadcast()" style="width:100%;padding:12px;font-size:16px;"> Broadcast Bhejo</button>
+<div class="section"><div class="section-header"><h3>📤 Send Broadcast</h3></div><div class="section-body">
+<div id="bcPreview" style="color:#aaa;font-size:13px;margin-bottom:15px;background:#0f0f0f;padding:10px;border-radius:8px;"></div>
+<div class="btn-row">
+<button class="btn btn-green" onclick="sendBroadcast()" style="flex:1;padding:12px;font-size:15px;">📤 Broadcast Bhejo</button>
+<button class="btn btn-red" onclick="cancelBroadcast()" id="cancelBtn" style="display:none;padding:12px 20px;">🛑 Cancel</button>
+</div>
 <div id="bcProgress" style="display:none;margin-top:15px;">
-<p style="color:#25D366;font-size:14px;" id="bcProgressText">Sending...</p>
+<p style="color:#25D366;font-size:14px;margin-bottom:6px;" id="bcProgressText">⏳ Broadcast running...</p>
 <div class="progress-bar"><div class="progress-fill" id="bcProgressFill" style="width:0%"></div></div>
 </div>
 </div></div>
 
-<div class="section"><div class="section-header"><h3> Broadcast History</h3></div><div class="section-body" id="bcHistory"><div class="empty">Loading...</div></div></div>
+<div class="section"><div class="section-header"><h3>📋 Broadcast History</h3></div><div class="section-body" id="bcHistory"><div class="empty">Loading...</div></div></div>
 </div>
 
 <!-- CUSTOMERS -->
 <div class="page" id="page-customers">
-<div class="section"><div class="section-header"><h3> Customers</h3><span id="custCount" style="color:#aaa;font-size:13px;"></span></div>
+<div class="section"><div class="section-header"><h3>👥 All Customers</h3><span id="custCount" style="color:#aaa;font-size:13px;"></span></div>
 <div class="section-body" id="custList"><div class="empty">Loading...</div></div>
 </div></div>
 
 <!-- PRODUCTS -->
 <div class="page" id="page-products">
-<div class="section"><div class="section-header"><h3> Products</h3><button class="btn btn-green" onclick="addProduct()">+ Add Product</button></div>
+<div class="section"><div class="section-header"><h3>🎨 Products</h3><button class="btn btn-green" onclick="addProduct()">➕ Add Product</button></div>
 <div class="section-body" id="productsList"></div>
 </div></div>
 
 <!-- PAYMENT -->
 <div class="page" id="page-payment">
-<div class="section"><div class="section-header"><h3> Payment Details</h3></div><div class="section-body">
-<h4 style="color:#aaa;margin-bottom:15px"> EasyPaisa</h4>
+<div class="section"><div class="section-header"><h3>💳 Payment Details</h3></div><div class="section-body">
+<h4 style="color:#25D366;margin-bottom:15px;">📱 EasyPaisa</h4>
 <div class="form-group"><label>Number</label><input id="ep_number" placeholder="03XX-XXXXXXX"/></div>
 <div class="form-group"><label>Account Name</label><input id="ep_name" placeholder="Tumhara Naam"/></div>
-<h4 style="color:#aaa;margin:15px 0"> JazzCash</h4>
+<h4 style="color:#25D366;margin:15px 0;">📱 JazzCash</h4>
 <div class="form-group"><label>Number</label><input id="jc_number" placeholder="03XX-XXXXXXX"/></div>
 <div class="form-group"><label>Account Name</label><input id="jc_name" placeholder="Tumhara Naam"/></div>
-<h4 style="color:#aaa;margin:15px 0"> Bank Account</h4>
+<h4 style="color:#25D366;margin:15px 0;">🏦 Bank Account</h4>
 <div class="form-group"><label>Bank Name</label><input id="bank_name" placeholder="HBL"/></div>
 <div class="form-group"><label>Account Number</label><input id="bank_acc" placeholder="XXXXXXXXXXXXXXX"/></div>
 <div class="form-group"><label>Account Holder Name</label><input id="bank_holder" placeholder="Tumhara Naam"/></div>
 <div class="form-group"><label>IBAN</label><input id="bank_iban" placeholder="PK00XXXX..."/></div>
-<button class="save-btn" onclick="savePayment()"> Save Payment Details</button>
+<button class="save-btn" onclick="savePayment()">💾 Save Payment Details</button>
 </div></div></div>
 
 <!-- AI PROMPT -->
 <div class="page" id="page-prompt">
-<div class="section"><div class="section-header"><h3>AI Sales Agent Prompt</h3></div><div class="section-body">
-<div class="warn-box"> ORDER_READY word zaroor rakho. Price negotiation rules strong rakho!</div>
+<div class="section"><div class="section-header"><h3>🤖 AI Sales Agent Prompt</h3></div><div class="section-body">
+<div class="warn-box">⚠️ ORDER_READY word zaroor rakho! Price negotiation rules strong rakho!</div>
 <div class="form-group"><label>System Prompt</label><textarea id="aiPrompt" rows="20" style="min-height:400px;"></textarea></div>
-<button class="save-btn" onclick="savePrompt()"> Save Prompt</button>
+<button class="save-btn" onclick="savePrompt()">💾 Save Prompt</button>
 </div></div></div>
 
 <!-- SETTINGS -->
 <div class="page" id="page-settings">
-<div class="section"><div class="section-header"><h3> Settings</h3></div><div class="section-body">
+<div class="section"><div class="section-header"><h3>⚙️ Settings</h3></div><div class="section-body">
 <div class="form-group"><label>Business Name</label><input id="s_bizName" placeholder="Mega Agency"/></div>
 <div class="form-group"><label>Admin WhatsApp Number (92XXXXXXXXXX)</label><input id="s_adminNum" placeholder="923001234567"/></div>
 <div class="form-group"><label>Dashboard Password (khali chhodo agar same rakho)</label><input id="s_password" type="password" placeholder="New password..."/></div>
-<button class="save-btn" onclick="saveSettings()"> Save Settings</button>
+<button class="save-btn" onclick="saveSettings()">💾 Save Settings</button>
+<div class="danger-box">
+<h4 style="color:#e74c3c;margin-bottom:10px;">⚠️ Danger Zone</h4>
+<p style="color:#aaa;font-size:13px;margin-bottom:12px;">WhatsApp session delete karke naya QR generate karo — bot temporarily disconnect hoga</p>
+<button class="btn btn-red" onclick="doResetQr()">🔄 Regenerate WhatsApp QR</button>
+</div>
 </div></div></div>
 </div>
 
 <!-- Message Modal -->
 <div class="msg-modal" id="msgModal">
-<div class="msg-box"><h3> Custom Message Bhejo</h3>
+<div class="msg-box"><h3>💬 Custom Message Bhejo</h3>
 <input type="hidden" id="msgJid"/>
 <div class="form-group"><label>Message</label><textarea id="msgText" rows="4" placeholder="Yahan message likho..."></textarea></div>
 <div class="btn-row">
-<button class="btn btn-green" onclick="sendCustomMsg()"> Send</button>
-<button class="btn btn-gray" onclick="closeModal()">Cancel</button>
+<button class="btn btn-green" onclick="sendCustomMsg()">📤 Send</button>
+<button class="btn btn-gray" onclick="closeModal()">❌ Cancel</button>
 </div></div></div>
-<div class="toast" id="toast"> Saved!</div>
+<div class="toast" id="toast">✅ Done!</div>
 
 <script>
 let allData={};let products=[];let allChats=[];let selectedChats=new Set();let filteredChats=[];
 
 async function loadData(){
-    try{const r=await fetch('/api/data');allData=await r.json();products=JSON.parse(JSON.stringify(allData.products||[]));renderAll();}
-    catch(e){console.error(e);}
+    try{
+        const r=await fetch('/api/data');
+        allData=await r.json();
+        products=JSON.parse(JSON.stringify(allData.products||[]));
+        renderAll();
+        const cb=document.getElementById('cancelBtn');
+        if(cb)cb.style.display=allData.broadcastRunning?'block':'none';
+    }catch(e){console.error(e);}
 }
 
 function renderAll(){
     const badge=document.getElementById('botBadge');
-    badge.className='bot-badge '+(allData.botStatus==='connected'?'badge-live':'badge-off');
-    badge.textContent=allData.botStatus==='connected'?'Bot Live':' '+allData.botStatus;
+    if(allData.botStatus==='connected'){badge.className='bot-badge badge-live';badge.textContent='✅ Bot Live';}
+    else{badge.className='bot-badge badge-off';badge.textContent='⚠️ '+(allData.botStatus||'offline');}
     const s=allData.stats||{};
     document.getElementById('statsGrid').innerHTML=\`
-    <div class="stat-card" style="border-top:3px solid #f39c12"><h2 style="color:#f39c12">\${s.pending||0}</h2><p>Pending</p></div>
-    <div class="stat-card" style="border-top:3px solid #25D366"><h2 style="color:#25D366">\${s.approved||0}</h2><p> Approved</p></div>
-    <div class="stat-card" style="border-top:3px solid #e74c3c"><h2 style="color:#e74c3c">\${s.rejected||0}</h2><p> Rejected</p></div>
-    <div class="stat-card" style="border-top:3px solid #3498db"><h2 style="color:#3498db">\${s.existingChats||0}</h2><p>Chats</p></div>\`;
+    <div class="stat-card" style="border-top:3px solid #f39c12"><h2 style="color:#f39c12">\${s.pending||0}</h2><p>⏳ Pending</p></div>
+    <div class="stat-card" style="border-top:3px solid #25D366"><h2 style="color:#25D366">\${s.approved||0}</h2><p>✅ Approved</p></div>
+    <div class="stat-card" style="border-top:3px solid #e74c3c"><h2 style="color:#e74c3c">\${s.rejected||0}</h2><p>❌ Rejected</p></div>
+    <div class="stat-card" style="border-top:3px solid #3498db"><h2 style="color:#3498db">\${s.customers||0}</h2><p>👥 Customers</p></div>\`;
     document.getElementById('revenue').textContent='PKR '+(s.revenue||0).toLocaleString();
     document.getElementById('revenueDetail').textContent=(s.approved||0)+' orders approved';
     renderOrders();renderBcHistory();renderCustomers();renderProducts();renderPayment();renderPrompt();renderSettings();
@@ -811,32 +922,35 @@ function orderCard(o){
     const time=new Date(o.timestamp).toLocaleString('en-PK');
     const bc=o.status==='pending'?'bp':o.status==='approved'?'ba':'br';
     const lb=o.language?'<span style="background:#333;padding:2px 8px;border-radius:10px;font-size:11px;color:#aaa;">'+o.language+'</span>':'';
-    const acts=o.status==='pending'?\`<button class="btn btn-green" onclick="approveOrder(\${o.orderId})"> Approve</button><button class="btn btn-red" onclick="rejectOrder(\${o.orderId})">❌ Reject</button><button class="btn btn-blue" onclick="openMsg('\${o.customerJid}')">💬 Message</button>\`:\`<button class="btn btn-blue" onclick="openMsg('\${o.customerJid}')">💬 Message</button>\`;
+    const acts=o.status==='pending'?\`<button class="btn btn-green" onclick="approveOrder(\${o.orderId})">✅ Approve</button><button class="btn btn-red" onclick="rejectOrder(\${o.orderId})">❌ Reject</button><button class="btn btn-blue" onclick="openMsg('\${o.customerJid}')">💬 Message</button>\`:\`<button class="btn btn-blue" onclick="openMsg('\${o.customerJid}')">💬 Message</button>\`;
     return \`<div class="order-card \${o.status}"><div class="order-header"><span class="order-id">#\${o.orderId}</span><div style="display:flex;gap:6px;">\${lb}<span class="badge \${bc}">\${o.status.toUpperCase()}</span></div></div><div class="order-info">📱 Number: <b>\${o.customerNumber}</b><br>👤 Name: <b>\${o.customerName||'N/A'}</b><br>📸 Screenshot: <b>\${o.hasScreenshot?'✅ Received':'❌ Pending'}</b><br>📅 Time: <b>\${time}</b></div><div class="btn-row">\${acts}</div></div>\`;
 }
 
 function renderOrders(){
     const orders=Object.values(allData.orders||{}).sort((a,b)=>b.timestamp-a.timestamp);
     const p=orders.filter(o=>o.status==='pending');const a=orders.filter(o=>o.status==='approved');const r=orders.filter(o=>o.status==='rejected');
-    document.getElementById('pendingOrders').innerHTML=p.length===0?'<div class="empty">Koi pending order nahi </div>':p.map(orderCard).join('');
-    document.getElementById('approvedOrders').innerHTML=a.length===0?'<div class="empty">Koi approved order nahi</div>':a.map(orderCard).join('');
-    document.getElementById('rejectedOrders').innerHTML=r.length===0?'<div class="empty">Koi rejected order nahi</div>':r.map(orderCard).join('');
+    document.getElementById('pendingOrders').innerHTML=p.length===0?'<div class="empty">📭 Koi pending order nahi</div>':p.map(orderCard).join('');
+    document.getElementById('approvedOrders').innerHTML=a.length===0?'<div class="empty">📭 Koi approved order nahi</div>':a.map(orderCard).join('');
+    document.getElementById('rejectedOrders').innerHTML=r.length===0?'<div class="empty">📭 Koi rejected order nahi</div>':r.map(orderCard).join('');
 }
 
-async function approveOrder(id){if(!confirm('Approve?'))return;await fetch('/api/approve/'+id,{method:'POST'});showToast('Approved!');loadData();}
-async function rejectOrder(id){if(!confirm('Reject?'))return;await fetch('/api/reject/'+id,{method:'POST'});showToast(' Rejected!');loadData();}
+async function approveOrder(id){if(!confirm('✅ Approve karein?'))return;await fetch('/api/approve/'+id,{method:'POST'});showToast('✅ Approved!');loadData();}
+async function rejectOrder(id){if(!confirm('❌ Reject karein?'))return;await fetch('/api/reject/'+id,{method:'POST'});showToast('❌ Rejected!');loadData();}
 
 async function loadChats(){
-    try{const r=await fetch('/api/chats');const d=await r.json();allChats=d.chats||[];filteredChats=[...allChats];renderChats();}
-    catch(e){}
+    try{const r=await fetch('/api/chats');const d=await r.json();allChats=d.chats||[];filteredChats=[...allChats];renderChats();}catch(e){}
 }
 
 function renderChats(){
     const cs=document.getElementById('chatStatus');const cl=document.getElementById('chatsList');
-    if(allChats.length===0){cs.style.display='block';cs.textContent=allData.botStatus==='connected'?'Chats load ho rahi hain...':' Bot connect karo pehle!';cl.innerHTML='';updateSelCount();return;}
+    if(allChats.length===0){
+        cs.style.display='block';
+        cs.textContent=allData.botStatus==='connected'?'👥 Abhi tak koi customer nahi aaya...':'🔌 Bot connect karo pehle!';
+        cl.innerHTML='';updateSelCount();return;
+    }
     cs.style.display='none';
     cl.innerHTML=filteredChats.map(c=>\`<div class="chat-item \${selectedChats.has(c.jid)?'selected':''}" onclick="toggleChat('\${c.jid}')">
-    <div class="chat-avatar"></div>
+    <div class="chat-avatar">👤</div>
     <div class="chat-info"><div class="chat-name">\${c.name||c.number}</div><div class="chat-number">\${c.number}</div></div>
     <input type="checkbox" \${selectedChats.has(c.jid)?'checked':''} onclick="event.stopPropagation()"/>
     </div>\`).join('');
@@ -844,22 +958,23 @@ function renderChats(){
 }
 
 function toggleChat(jid){if(selectedChats.has(jid))selectedChats.delete(jid);else selectedChats.add(jid);renderChats();}
-function selectAll(){filteredChats.forEach(c=>selectedChats.add(c.jid));renderChats();showToast(' '+selectedChats.size+' selected!');}
+function selectAll(){filteredChats.forEach(c=>selectedChats.add(c.jid));renderChats();showToast('✅ '+selectedChats.size+' selected!');}
 function deselectAll(){selectedChats.clear();renderChats();}
-function filterChats(){const q=document.getElementById('chatSearch').value.toLowerCase();filteredChats=allChats.filter(c=>(c.name||'').toLowerCase().includes(q)||c.number.includes(q));renderChats();}
-function updateSelCount(){const el=document.getElementById('selCount');if(el)el.textContent=selectedChats.size+' selected';}
-function updateBcPreview(){const d=parseInt(document.getElementById('bc_delay')?.value||5);const el=document.getElementById('bcPreview');if(el)el.innerHTML=\`📊 <b style="color:white">\${selectedChats.size}</b> contacts | Delay: <b style="color:white">\${d}s</b> | Est: <b style="color:white">\${Math.ceil(selectedChats.size*d/60)} min</b>\`;}
+function filterChats(){const q=document.getElementById('chatSearch').value.toLowerCase();filteredChats=allChats.filter(c=>(c.name||'').toLowerCase().includes(q)||(c.number||'').includes(q));renderChats();}
+function updateSelCount(){const el=document.getElementById('selCount');if(el)el.textContent=selectedChats.size>0?selectedChats.size+' selected':'';}
+function updateBcPreview(){const d=parseInt(document.getElementById('bc_delay')?.value||5);const el=document.getElementById('bcPreview');if(el)el.innerHTML=selectedChats.size>0?\`📊 <b style="color:white">\${selectedChats.size}</b> customers | ⏱️ Delay: <b style="color:white">\${d}s</b> | ⏳ Est: <b style="color:white">\${Math.ceil(selectedChats.size*d/60)} min</b>\`:'Contacts select karo';}
 
 async function generateMsg(){
     const offer=document.getElementById('offerDetails').value;
-    if(!offer.trim()){showToast(' Offer details likho!');return;}
-    const btn=document.getElementById('genBtn');btn.textContent=' Generating...';btn.disabled=true;
+    if(!offer.trim()){showToast('⚠️ Offer details likho!');return;}
+    const btn=document.getElementById('genBtn');btn.textContent='⏳ Generating...';btn.disabled=true;
     const personalized=document.getElementById('msgType').value==='personalized';
     try{
         const r=await fetch('/api/generate-message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({offerDetails:offer,customerName:'Dost',personalized})});
         const d=await r.json();
         if(d.success){document.getElementById('msgPreview').value=d.message;document.getElementById('generatedMsg').style.display='block';showToast('✅ Message generated!');}
-    }catch(e){showToast(' Error!');}
+        else showToast('❌ Error: '+(d.error||''));
+    }catch(e){showToast('❌ Error!');}
     btn.textContent='🤖 AI Se Message Generate Karo';btn.disabled=false;updateBcPreview();
 }
 
@@ -868,41 +983,61 @@ async function sendBroadcast(){
     const offer=document.getElementById('offerDetails').value;
     const personalized=document.getElementById('msgType').value==='personalized';
     const delay=parseInt(document.getElementById('bc_delay').value)||5;
-    if(!msg.trim()&&!offer.trim()){showToast(' Pehle message generate karo!');return;}
-    if(selectedChats.size===0){showToast(' Contacts select karo!');return;}
-    if(!confirm(' '+selectedChats.size+' contacts ko message bhejein?'))return;
+    if(!msg.trim()&&!offer.trim()){showToast('⚠️ Pehle message generate karo!');return;}
+    if(selectedChats.size===0){showToast('⚠️ Customers select karo!');return;}
+    if(!confirm('📤 '+selectedChats.size+' customers ko message bhejein?'))return;
     const contacts=allChats.filter(c=>selectedChats.has(c.jid)).map(c=>({jid:c.jid,name:c.name||c.number,number:c.number}));
     document.getElementById('bcProgress').style.display='block';
+    document.getElementById('cancelBtn').style.display='block';
     try{
         const r=await fetch('/api/smart-broadcast',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({offerDetails:offer,baseMessage:msg,personalized,delaySeconds:delay,selectedContacts:contacts})});
         const d=await r.json();
-        if(d.success){showToast(' Broadcast shuru! '+contacts.length+' messages jaayenge.');loadData();}
-        else showToast(' Error: '+(d.error||''));
-    }catch(e){showToast(' Error: '+e.message);}
+        if(d.success)showToast('📤 Broadcast shuru! '+contacts.length+' messages jaayenge.');
+        else showToast('❌ '+(d.error||'Error'));
+    }catch(e){showToast('❌ Error: '+e.message);}
+}
+
+async function cancelBroadcast(){
+    if(!confirm('🛑 Broadcast cancel karein?'))return;
+    const r=await fetch('/api/cancel-broadcast',{method:'POST'});
+    const d=await r.json();
+    if(d.success){showToast('🛑 Broadcast cancelled!');document.getElementById('cancelBtn').style.display='none';document.getElementById('bcProgress').style.display='none';loadData();}
+}
+
+async function doResetQr(){
+    if(!confirm('🔄 WhatsApp session delete karein aur naya QR generate karein?\nBot temporarily disconnect hoga!'))return;
+    showToast('⏳ Auth clearing...');
+    const r=await fetch('/api/reset-qr',{method:'POST'});
+    const d=await r.json();
+    if(d.success){showToast('✅ Redirecting to QR...');setTimeout(()=>window.location='/qr',2500);}
+    else showToast('❌ Error!');
 }
 
 function renderBcHistory(){
     const bcs=allData.broadcasts||[];
-    document.getElementById('bcHistory').innerHTML=bcs.length===0?'<div class="empty">Koi broadcast nahi</div>':bcs.map(b=>\`<div class="order-card \${b.status==='completed'?'approved':'pending'}"><div class="order-header"><span class="order-id">\${b.status==='completed'?'✅':'⏳'} \${b.status.toUpperCase()}</span><span style="color:#aaa;font-size:12px;">\${new Date(b.createdAt).toLocaleString('en-PK')}</span></div><div class="order-info">\${(b.baseMessage||b.offerDetails||'').substring(0,80)}...<br>Sent:<b>\${b.sentCount||0}</b> Failed:<b>\${b.failedCount||0}</b> Total:<b>\${b.totalContacts||0}</b> Delay:<b>\${b.delaySeconds}s</b></div></div>\`).join('');
+    document.getElementById('bcHistory').innerHTML=bcs.length===0?'<div class="empty">📭 Koi broadcast nahi</div>':bcs.map(b=>{
+        const icon=b.status==='completed'?'✅':b.status==='cancelled'?'🛑':b.status==='running'?'⏳':'📋';
+        const cls=b.status==='completed'?'approved':b.status==='cancelled'?'cancelled':b.status==='running'?'running':'pending';
+        return\`<div class="order-card \${cls}"><div class="order-header"><span class="order-id">\${icon} \${b.status.toUpperCase()}</span><span style="color:#aaa;font-size:12px;">\${new Date(b.createdAt).toLocaleString('en-PK')}</span></div><div class="order-info">\${(b.baseMessage||b.offerDetails||'').substring(0,80)}...<br>✅ Sent: <b>\${b.sentCount||0}</b> | ❌ Failed: <b>\${b.failedCount||0}</b> | 📊 Total: <b>\${b.totalContacts||0}</b> | ⏱️ <b>\${b.delaySeconds}s</b></div></div>\`;
+    }).join('');
 }
 
 function renderCustomers(){
     const cs=Object.values(allData.customers||{}).sort((a,b)=>b.lastSeen-a.lastSeen);
     const cc=document.getElementById('custCount');if(cc)cc.textContent=cs.length+' total';
-    document.getElementById('custList').innerHTML=cs.length===0?'<div class="empty">Koi customer nahi abhi</div>':cs.map(c=>\`<div style="background:#0f0f0f;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid #222;display:flex;justify-content:space-between;align-items:center;"><div><p style="font-weight:bold;color:white;">\${c.name||'Unknown'}</p><p style="color:#aaa;font-size:12px;">\${c.number} • \${c.language||'?'} • \${new Date(c.lastSeen).toLocaleDateString('en-PK')}</p></div><button class="btn btn-blue" onclick="openMsg('\${c.jid}')">💬</button></div>\`).join('');
+    document.getElementById('custList').innerHTML=cs.length===0?'<div class="empty">📭 Koi customer nahi abhi</div>':cs.map(c=>\`<div style="background:#0f0f0f;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid #222;display:flex;justify-content:space-between;align-items:center;"><div><p style="font-weight:bold;color:white;">\${c.name||'Unknown'}</p><p style="color:#aaa;font-size:12px;">\${c.number} • \${c.language||'?'} • \${new Date(c.lastSeen).toLocaleDateString('en-PK')}</p></div><button class="btn btn-blue" onclick="openMsg('\${c.jid}')">💬</button></div>\`).join('');
 }
 
 function renderProducts(){
     const el=document.getElementById('productsList');
-    if(!products.length){el.innerHTML='<div class="empty">Koi product nahi</div>';return;}
+    if(!products.length){el.innerHTML='<div class="empty">📭 Koi product nahi</div>';return;}
     el.innerHTML=products.map((p,i)=>\`<div class="product-card"><div class="product-header"><span class="product-name">\${p.name}</span><label class="toggle"><input type="checkbox" \${p.active?'checked':''} onchange="products[\${i}].active=this.checked"/><span class="slider"></span></label></div><div class="form-group"><label>Product Name</label><input value="\${p.name}" onchange="products[\${i}].name=this.value"/></div><div class="form-group"><label>Price (PKR)</label><input type="number" value="\${p.price}" onchange="products[\${i}].price=parseInt(this.value)"/></div><div class="form-group"><label>Description</label><textarea onchange="products[\${i}].description=this.value">\${p.description}</textarea></div><div class="form-group"><label>Download Link</label><input value="\${p.downloadLink||''}" placeholder="https://drive.google.com/..." onchange="products[\${i}].downloadLink=this.value"/></div><div class="form-group"><label>Features</label><div class="feature-list">\${(p.features||[]).map((f,j)=>\`<div class="feature-tag">\${f}<button onclick="removeFeature(\${i},\${j})">×</button></div>\`).join('')}</div><div class="feature-input"><input id="newFeature_\${i}" placeholder="New feature..." onkeypress="if(event.key==='Enter')addFeature(\${i})"/><button onclick="addFeature(\${i})">+ Add</button></div></div><div class="btn-row"><button class="btn btn-green" onclick="saveProducts()">💾 Save</button><button class="btn btn-red" onclick="removeProduct(\${i})">🗑️ Delete</button></div></div>\`).join('');
 }
 
-function toggleProduct(i){products[i].active=!products[i].active;}
 function addFeature(i){const inp=document.getElementById('newFeature_'+i);if(!inp.value.trim())return;if(!products[i].features)products[i].features=[];products[i].features.push(inp.value.trim());inp.value='';renderProducts();}
 function removeFeature(i,j){products[i].features.splice(j,1);renderProducts();}
 function addProduct(){products.push({id:Date.now(),name:'New Product',price:999,description:'',features:[],downloadLink:'',active:false});renderProducts();}
-function removeProduct(i){if(confirm('Delete karo?')){products.splice(i,1);renderProducts();}}
+function removeProduct(i){if(confirm('🗑️ Delete karo?')){products.splice(i,1);renderProducts();}}
 async function saveProducts(){await fetch('/api/products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(products)});showToast('✅ Products Saved!');loadData();}
 
 function renderPayment(){const p=allData.payment||{};document.getElementById('ep_number').value=p.easypaisa?.number||'';document.getElementById('ep_name').value=p.easypaisa?.name||'';document.getElementById('jc_number').value=p.jazzcash?.number||'';document.getElementById('jc_name').value=p.jazzcash?.name||'';document.getElementById('bank_name').value=p.bank?.bankName||'';document.getElementById('bank_acc').value=p.bank?.accountNumber||'';document.getElementById('bank_holder').value=p.bank?.accountName||'';document.getElementById('bank_iban').value=p.bank?.iban||'';}
@@ -919,23 +1054,22 @@ function showPage(page){
     document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
     const pageEl=document.getElementById('page-'+page);if(pageEl)pageEl.classList.add('active');
     const navEl=document.getElementById('nav-'+page);if(navEl)navEl.classList.add('active');
-    const titles={orders:' Orders',broadcast:' Smart Broadcast',customers:' Customers',products:' Products',payment:'Payment',prompt:'AI Prompt',settings:' Settings'};
+    const titles={orders:'📦 Orders',broadcast:'📢 Smart Broadcast',customers:'👥 Customers',products:'🎨 Products',payment:'💳 Payment',prompt:'🤖 AI Prompt',settings:'⚙️ Settings'};
     document.getElementById('pageTitle').textContent=titles[page]||page;
-    const showStats=['orders'].includes(page);
+    const showStats=page==='orders';
     document.getElementById('statsGrid').style.display=showStats?'grid':'none';
     document.getElementById('revenueCard').style.display=showStats?'block':'none';
-    if(page==='broadcast'&&allData.botStatus==='connected')loadChats();
+    if(page==='broadcast')loadChats();
 }
 
 function openMsg(jid){document.getElementById('msgJid').value=jid;document.getElementById('msgModal').classList.add('show');}
 function closeModal(){document.getElementById('msgModal').classList.remove('show');}
 async function sendCustomMsg(){const jid=document.getElementById('msgJid').value;const message=document.getElementById('msgText').value;if(!message.trim())return;await fetch('/api/send-message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jid,message})});showToast('✅ Message Sent!');closeModal();document.getElementById('msgText').value='';}
-
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',3000);}
 
 loadData();
 setInterval(loadData,15000);
-setInterval(()=>{if(allData.botStatus==='connected')loadChats();},30000);
+setInterval(()=>{if(document.getElementById('page-broadcast').classList.contains('active'))loadChats();},30000);
 </script>
 </body></html>`);
         return;
@@ -946,7 +1080,7 @@ setInterval(()=>{if(allData.botStatus==='connected')loadChats();},30000);
 });
 
 server.listen(process.env.PORT || 3000, () => {
-    console.log(' Server ready! /dashboard | /qr');
+    console.log('🚀 Server ready! /dashboard | /qr');
 });
 
 // ─────────────────────────────────────────
@@ -965,7 +1099,6 @@ async function handleMessage(sock, message) {
         const senderName = message.pushName || 'Customer';
         const msgType = Object.keys(message.message || {})[0];
 
-        // Save customer
         if (!botData.customers) botData.customers = {};
         botData.customers[senderId] = {
             jid: senderId,
@@ -974,7 +1107,7 @@ async function handleMessage(sock, message) {
             language: botData.customers[senderId]?.language || 'roman_urdu'
         };
 
-        // VOICE MESSAGE
+        // VOICE
         if (msgType === 'audioMessage' || msgType === 'pttMessage') {
             await sock.sendPresenceUpdate('composing', senderId);
             try {
@@ -999,7 +1132,7 @@ async function handleMessage(sock, message) {
                     }
                 } else {
                     await sock.sendPresenceUpdate('paused', senderId);
-                    await sock.sendMessage(senderId, { text: ' Voice samajh nahi aaya. Text mein likhein please! 🙏' });
+                    await sock.sendMessage(senderId, { text: '🎤 Voice samajh nahi aaya. Text mein likhein please! 🙏' });
                 }
             } catch (e) {
                 await sock.sendPresenceUpdate('paused', senderId);
@@ -1008,7 +1141,7 @@ async function handleMessage(sock, message) {
             return;
         }
 
-        // IMAGE/SCREENSHOT
+        // IMAGE / SCREENSHOT
         if (msgType === 'imageMessage') {
             const existingOrder = Object.values(botData.orders).find(o => o.customerJid === senderId && o.status === 'pending');
             if (existingOrder) {
@@ -1033,7 +1166,7 @@ async function handleMessage(sock, message) {
             return;
         }
 
-        // TEXT MESSAGE
+        // TEXT
         const userMessage = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
         if (!userMessage.trim()) return;
 
@@ -1058,7 +1191,6 @@ async function handleMessage(sock, message) {
                 await new Promise(r => setTimeout(r, 1500));
             }
             await sock.sendMessage(senderId, { text: getPaymentMessage(orderId, product, lang) });
-            console.log(`🛒 New Order: #${orderId} for ${senderName}`);
         } else {
             await sock.sendMessage(senderId, { text: aiReply.message }, { quoted: message });
         }
@@ -1068,40 +1200,50 @@ async function handleMessage(sock, message) {
 }
 
 // ─────────────────────────────────────────
-// WHATSAPP BOT — PURANA SIMPLE LOGIC JO KAAM KARTA THA
+// WHATSAPP BOT — STRONG QR + REDIS AUTH
 // ─────────────────────────────────────────
 async function startBot() {
     try {
-        const { version, isLatest } = await fetchLatestBaileysVersion();
-        console.log(`📱 WA Version: ${version.join('.')} — Latest: ${isLatest}`);
+        botRestartCount++;
+        console.log(`🚀 Bot start attempt #${botRestartCount}`);
 
-        const { state, saveCreds } = await useMultiFileAuthState('/tmp/auth_info');
+        // Restore auth from Redis before anything
+        const restored = await restoreAuthFromRedis();
+        console.log(restored ? '✅ Session restored from Redis!' : 'ℹ️ No saved session — QR scan needed');
 
-        // Global store for chats
+        // Ensure auth dir exists
+        if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
+
+        const { version } = await fetchLatestBaileysVersion();
+        const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+
         globalStore = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
 
         const sock = makeWASocket({
-            version, auth: state,
+            version,
+            auth: state,
             logger: pino({ level: 'silent' }),
             browser: Browsers.ubuntu('Chrome'),
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 60000,
-            keepAliveIntervalMs: 30000,
+            keepAliveIntervalMs: 25000,
             emitOwnEvents: false,
             markOnlineOnConnect: false,
             generateHighQualityLinkPreview: false,
-            qrTimeout: 60000,
+            syncFullHistory: false,
             retryRequestDelayMs: 2000,
             maxMsgRetryCount: 5,
             fireInitQueries: true,
-            syncFullHistory: false
         });
 
-        // Store bind
         globalStore.bind(sock.ev);
-
         sockGlobal = sock;
-        sock.ev.on('creds.update', saveCreds);
+
+        // Save creds locally AND backup to Redis on every update
+        sock.ev.on('creds.update', async () => {
+            await saveCreds();
+            await backupAuthToRedis();
+        });
 
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
@@ -1109,37 +1251,42 @@ async function startBot() {
             if (qr) {
                 currentQR = qr;
                 botStatus = 'qr_ready';
-                console.log('✅ QR Ready! /qr pe jao scan karne ke liye!');
+                console.log(`✅ QR Ready! (attempt #${botRestartCount}) — Go to /qr to scan!`);
             }
 
             if (connection === 'close') {
                 currentQR = null;
                 const code = lastDisconnect?.error?.output?.statusCode;
-                console.log('❌ Disconnected, code:', code);
+                const reason = lastDisconnect?.error?.message || '';
+                console.log(`❌ Disconnected — code: ${code} | reason: ${reason}`);
 
-                if (code === DisconnectReason.loggedOut) {
+                if (code === DisconnectReason.loggedOut || code === 401) {
                     botStatus = 'logged_out';
-                    try { fs.rmSync('/tmp/auth_info', { recursive: true, force: true }); } catch (e) {}
-                    setTimeout(startBot, 5000);
+                    await clearAllAuth();
+                    setTimeout(startBot, 3000);
+                } else if (code === 405 || code === 428) {
+                    botStatus = 'reconnecting';
+                    setTimeout(startBot, 20000);
                 } else {
                     botStatus = 'reconnecting';
-                    setTimeout(startBot, code === 405 ? 15000 : 10000);
+                    const delay = Math.min(5000 * botRestartCount, 30000);
+                    setTimeout(startBot, delay);
                 }
             }
 
             if (connection === 'open') {
                 currentQR = null;
                 botStatus = 'connected';
-                console.log('✅ WhatsApp Connected! Mega Agency LIVE!');
-                // Chats load karo background mein
+                botRestartCount = 0;
+                console.log('✅ WhatsApp Connected! Mega Agency LIVE! 🚀');
+                await backupAuthToRedis();
                 setTimeout(processChatsFromStore, 5000);
                 await initSheet().catch(() => {});
             }
         });
 
-        // Chats sync events
-        sock.ev.on('chats.upsert', () => { processChatsFromStore(); });
-        sock.ev.on('chats.set', () => { setTimeout(processChatsFromStore, 2000); });
+        sock.ev.on('chats.upsert', () => processChatsFromStore());
+        sock.ev.on('chats.set', () => setTimeout(processChatsFromStore, 2000));
 
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             if (type !== 'notify') return;
@@ -1147,8 +1294,10 @@ async function startBot() {
         });
 
     } catch (err) {
-        console.error('Bot error:', err.message);
-        setTimeout(startBot, 15000);
+        console.error(`Bot error (attempt #${botRestartCount}):`, err.message);
+        botStatus = 'error';
+        const delay = Math.min(10000 * botRestartCount, 60000);
+        setTimeout(startBot, delay);
     }
 }
 
