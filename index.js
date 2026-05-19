@@ -15,6 +15,8 @@ const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
+const crypto = require('crypto');
+const os = require('os');
 
 // ─────────────────────────────────────────
 // UPSTASH REDIS
@@ -45,7 +47,7 @@ async function redisSet(key, value) {
 // ─────────────────────────────────────────
 // AUTH BACKUP / RESTORE
 // ─────────────────────────────────────────
-const AUTH_DIR = '/tmp/auth_info';
+const AUTH_DIR = path.join(os.tmpdir(), 'auth_info');
 const AUTH_KEY = 'wa_auth_v3';
 
 async function backupAuthToRedis() {
@@ -60,7 +62,7 @@ async function backupAuthToRedis() {
                 const content = fs.readFileSync(path.join(AUTH_DIR, file), 'utf8');
                 authData[file] = content;
                 totalSize += content.length;
-            } catch (e) {}
+            } catch (e) { }
         }
         if (totalSize > 400000) {
             if (authData['creds.json']) {
@@ -94,8 +96,8 @@ async function restoreAuthFromRedis() {
 }
 
 async function clearAllAuth() {
-    await redisSet(AUTH_KEY, null);
-    try { fs.rmSync(AUTH_DIR, { recursive: true, force: true }); } catch (e) {}
+    await redisSet(AUTH_KEY, {});
+    try { fs.rmSync(AUTH_DIR, { recursive: true, force: true }); } catch (e) { }
     console.log('🗑️ Auth cleared!');
 }
 
@@ -111,7 +113,6 @@ async function getGoogleToken() {
         const now = Math.floor(Date.now() / 1000);
         const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
         const payload = Buffer.from(JSON.stringify({ iss: email, scope: 'https://www.googleapis.com/auth/spreadsheets', aud: 'https://oauth2.googleapis.com/token', exp: now + 3600, iat: now })).toString('base64url');
-        const crypto = require('crypto');
         const sign = crypto.createSign('RSA-SHA256');
         sign.update(`${header}.${payload}`);
         const jwt = `${header}.${payload}.${sign.sign(key, 'base64url')}`;
@@ -139,12 +140,19 @@ async function initSheet() {
         const token = await getGoogleToken();
         if (!token) return;
         const sheetId = process.env.GOOGLE_SHEET_ID;
+        try {
+            const check = await axios.get(
+                `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (check.data.values && check.data.values.length > 0) return;
+        } catch (e) { }
         await axios.post(
             `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:append?valueInputOption=USER_ENTERED`,
             { values: [['Order ID', 'Customer', 'Phone', 'Product', 'Amount', 'Status', 'Language', 'Date']] },
             { headers: { Authorization: `Bearer ${token}` } }
         );
-    } catch (e) {}
+    } catch (e) { }
 }
 
 // ─────────────────────────────────────────
@@ -178,7 +186,7 @@ function detectLang(text) {
 // DATA STORE
 // ─────────────────────────────────────────
 const DATA_KEY = 'bot_data_v6';
-const DATA_FILE = '/tmp/bot_data_v6.json';
+const DATA_FILE = path.join(os.tmpdir(), 'bot_data_v6.json');
 
 function getDefaultData() {
     return {
@@ -236,7 +244,7 @@ async function saveData() {
     } catch (e) { console.log('Save error:', e.message); }
 }
 
-loadData();
+// loadData() moved to startup sequence at bottom
 
 // ─────────────────────────────────────────
 // BOT STATE
@@ -257,13 +265,23 @@ function isAuthenticated(req) {
     const cookies = req.headers.cookie || '';
     const sessionMatch = cookies.match(/session=([^;]+)/);
     if (!sessionMatch) return false;
-    return sessions[sessionMatch[1]] === true;
+    const session = sessions[sessionMatch[1]];
+    if (!session) return false;
+    if (Date.now() - session.created > 24 * 60 * 60 * 1000) {
+        delete sessions[sessionMatch[1]];
+        return false;
+    }
+    return true;
 }
 
 async function parseBody(req) {
     return new Promise((resolve) => {
         let body = '';
-        req.on('data', chunk => body += chunk.toString());
+        const maxSize = 1024 * 1024;
+        req.on('data', chunk => {
+            body += chunk.toString();
+            if (body.length > maxSize) { req.destroy(); resolve({}); }
+        });
         req.on('end', () => { try { resolve(JSON.parse(body)); } catch { resolve({}); } });
     });
 }
@@ -339,7 +357,7 @@ async function generateBroadcastMessage(offerDetails, customerName, personalized
                 : { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://mega-agency.com', 'X-Title': 'Mega Agency' };
             const res = await axios.post(url2, { model: m, messages: [{ role: 'user', content: prompt }], max_tokens: 200, temperature: 0.9 }, { headers, timeout: 15000 });
             return res.data.choices[0].message.content.trim();
-        } catch (e) {}
+        } catch (e) { }
     }
     return offerDetails;
 }
@@ -441,10 +459,10 @@ async function getAISalesResponse(userMessage, userId, customerName, lang) {
             return { message: cleanMessage, shouldOrder, product: activeProduct };
         } catch (err) {
             console.log(`❌ ${provider}/${model} fail`);
-            if (salesHistory[userId].length > 0) salesHistory[userId].pop();
         }
     }
 
+    if (salesHistory[userId].length > 0) salesHistory[userId].pop();
     const fb = { urdu: '⚠️ تکنیکی مسئلہ — 1 منٹ بعد کوشش کریں! 🙏', roman_urdu: '⚠️ Thodi technical difficulty. 1 min mein dobara try karo! 🙏', english: '⚠️ Technical issue. Try again in 1 minute! 🙏' };
     return { message: fb[lang] || fb.roman_urdu, shouldOrder: false, product: activeProduct };
 }
@@ -453,18 +471,18 @@ async function getAISalesResponse(userMessage, userId, customerName, lang) {
 // WEB SERVER
 // ─────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
-    const parsedUrl = url.parse(req.url, true);
+    const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const pathname = parsedUrl.pathname;
-    const publicPaths = ['/login', '/qr', '/api/reset-qr'];
+    const publicPaths = ['/login', '/qr'];
 
     // LOGIN
     if (pathname === '/login') {
         if (req.method === 'POST') {
             const body = await parseBody(req);
             if (body.password === botData.settings.dashboardPassword) {
-                const sessionId = Math.random().toString(36).substring(2);
-                sessions[sessionId] = true;
-                res.writeHead(200, { 'Set-Cookie': `session=${sessionId}; Path=/; HttpOnly`, 'Content-Type': 'application/json' });
+                const sessionId = crypto.randomUUID();
+                sessions[sessionId] = { created: Date.now() };
+                res.writeHead(200, { 'Set-Cookie': `session=${sessionId}; Path=/; HttpOnly; SameSite=Strict`, 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: true }));
             } else {
                 res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -472,8 +490,8 @@ const server = http.createServer(async (req, res) => {
             }
             return;
         }
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(`<!DOCTYPE html><html><head><title>Login</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#0f0f0f;color:white;font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;}.box{background:#1a1a1a;padding:40px;border-radius:16px;width:90%;max-width:380px;border:1px solid #333;text-align:center;}h1{color:#25D366;font-size:24px;margin-bottom:8px;}p{color:#aaa;font-size:13px;margin-bottom:25px;}input{width:100%;padding:12px 15px;background:#0f0f0f;border:1px solid #333;border-radius:8px;color:white;font-size:15px;margin-bottom:15px;outline:none;}input:focus{border-color:#25D366;}button{width:100%;padding:12px;background:#25D366;border:none;border-radius:8px;color:black;font-size:16px;font-weight:bold;cursor:pointer;}button:hover{background:#1ebe57;}.err{color:#e74c3c;font-size:13px;margin-top:10px;display:none;}</style></head><body><div class="box"><h1>🏪 Mega Agency</h1><p>Admin Dashboard Login</p><input type="password" id="pass" placeholder="Password" onkeypress="if(event.key==='Enter')login()"/><button onclick="login()">🔐 Login</button><div class="err" id="err">❌ Wrong password!</div></div><script>async function login(){const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('pass').value})});const d=await r.json();if(d.success)window.location='/dashboard';else document.getElementById('err').style.display='block';}</script></body></html>`);
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Login</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#0f0f0f;color:white;font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;}.box{background:#1a1a1a;padding:40px;border-radius:16px;width:90%;max-width:380px;border:1px solid #333;text-align:center;}h1{color:#25D366;font-size:24px;margin-bottom:8px;}p{color:#aaa;font-size:13px;margin-bottom:25px;}input{width:100%;padding:12px 15px;background:#0f0f0f;border:1px solid #333;border-radius:8px;color:white;font-size:15px;margin-bottom:15px;outline:none;}input:focus{border-color:#25D366;}button{width:100%;padding:12px;background:#25D366;border:none;border-radius:8px;color:black;font-size:16px;font-weight:bold;cursor:pointer;}button:hover{background:#1ebe57;}.err{color:#e74c3c;font-size:13px;margin-top:10px;display:none;}</style></head><body><div class="box"><h1>🏪 Mega Agency</h1><p>Admin Dashboard Login</p><input type="password" id="pass" placeholder="Password" onkeypress="if(event.key==='Enter')login()"/><button onclick="login()">🔐 Login</button><div class="err" id="err">❌ Wrong password!</div></div><script>async function login(){const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('pass').value})});const d=await r.json();if(d.success)window.location='/dashboard';else document.getElementById('err').style.display='block';}</script></body></html>`);
         return;
     }
 
@@ -484,7 +502,7 @@ const server = http.createServer(async (req, res) => {
         currentQR = null;
         botStatus = 'starting';
         if (sockGlobal) {
-            try { sockGlobal.end(); sockGlobal.ws?.close(); } catch (e) {}
+            try { sockGlobal.end(); sockGlobal.ws?.close(); } catch (e) { }
             sockGlobal = null;
         }
         setTimeout(() => startBot(), 3000);
@@ -502,7 +520,7 @@ const server = http.createServer(async (req, res) => {
 
     // QR PAGE
     if (pathname === '/qr') {
-        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         const resetScript = `<script>async function resetQr(){if(!confirm('New QR generate karein? Session delete hoga!'))return;const r=await fetch('/api/reset-qr',{method:'POST'});const d=await r.json();if(d.success){alert('✅ Auth cleared! 3 sec mein naya QR...');setTimeout(()=>location.reload(),3500);}}</script>`;
         const btnStyle = `style="background:#e74c3c;color:white;border:none;padding:10px 22px;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;margin-top:12px;"`;
 
@@ -524,7 +542,6 @@ const server = http.createServer(async (req, res) => {
     // CANCEL BROADCAST
     if (pathname === '/api/cancel-broadcast' && req.method === 'POST') {
         broadcastCancelled = true;
-        broadcastRunning = false;
         const runningBc = botData.broadcasts?.find(b => b.status === 'running');
         if (runningBc) { runningBc.status = 'cancelled'; await saveData(); }
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -603,19 +620,28 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/settings' && req.method === 'POST') {
-        const b = await parseBody(req); botData.settings = { ...botData.settings, ...b }; await saveData();
+        const b = await parseBody(req);
+        if (!b || typeof b !== 'object' || Array.isArray(b)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: 'Invalid data' })); return; }
+        botData.settings = { ...botData.settings, businessName: b.businessName || botData.settings.businessName, adminNumber: b.adminNumber || botData.settings.adminNumber, dashboardPassword: b.dashboardPassword || botData.settings.dashboardPassword, currency: b.currency || botData.settings.currency };
+        await saveData();
         res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
     }
     if (pathname === '/api/payment' && req.method === 'POST') {
-        const b = await parseBody(req); botData.payment = b; await saveData();
+        const b = await parseBody(req);
+        if (!b || typeof b !== 'object' || Array.isArray(b)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: 'Invalid data' })); return; }
+        botData.payment = b; await saveData();
         res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
     }
     if (pathname === '/api/products' && req.method === 'POST') {
-        const b = await parseBody(req); botData.products = b; await saveData();
+        const b = await parseBody(req);
+        if (!b || !Array.isArray(b)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: 'Invalid data' })); return; }
+        botData.products = b; await saveData();
         res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
     }
     if (pathname === '/api/prompt' && req.method === 'POST') {
-        const b = await parseBody(req); botData.aiPrompt = b.prompt; await saveData();
+        const b = await parseBody(req);
+        if (!b || typeof b.prompt !== 'string') { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: 'Invalid data' })); return; }
+        botData.aiPrompt = b.prompt; await saveData();
         res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
     }
 
@@ -644,7 +670,7 @@ const server = http.createServer(async (req, res) => {
             try {
                 await sockGlobal.sendMessage(order.customerJid, { text: `❌ *Payment Verify Nahi Ho Saki*\n\nOrder *#${order.orderId}*\n\nScreenshot sahi nahi tha.\nDobara sahi screenshot bhejo ya admin se contact karo.\n\n"buy" likhkar dobara try karo! 💪` });
                 await saveToSheet({ ...order, status: 'rejected' });
-            } catch (e) {}
+            } catch (e) { }
         }
         res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
     }
@@ -671,9 +697,10 @@ const server = http.createServer(async (req, res) => {
 
     // MAIN DASHBOARD
     if (pathname === '/dashboard' || pathname === '/') {
-        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(`<!DOCTYPE html>
 <html><head>
+<meta charset="UTF-8">
 <title>${botData.settings.businessName} - Admin</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
@@ -1075,8 +1102,8 @@ setInterval(()=>{if(document.getElementById('page-broadcast').classList.contains
         return;
     }
 
-    res.writeHead(302, { Location: '/dashboard' });
-    res.end();
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Not Found' }));
 });
 
 server.listen(process.env.PORT || 3000, () => {
@@ -1125,7 +1152,7 @@ async function handleMessage(sock, message) {
                         botData.orderCounter++;
                         const orderId = botData.orderCounter;
                         const product = ai.product || botData.products[0];
-                        botData.orders[senderId] = { orderId, customerJid: senderId, customerNumber: senderId.replace('@s.whatsapp.net', ''), customerName: senderName, productId: product?.id, language: lang, status: 'pending', hasScreenshot: false, timestamp: Date.now() };
+                        botData.orders[orderId] = { orderId, customerJid: senderId, customerNumber: senderId.replace('@s.whatsapp.net', ''), customerName: senderName, productId: product?.id, language: lang, status: 'pending', hasScreenshot: false, timestamp: Date.now() };
                         await saveData();
                         await new Promise(r => setTimeout(r, 1500));
                         await sock.sendMessage(senderId, { text: getPaymentMessage(orderId, product, lang) });
@@ -1157,7 +1184,7 @@ async function handleMessage(sock, message) {
                 const adminJid = botData.settings.adminNumber + '@s.whatsapp.net';
                 try {
                     await sock.sendMessage(adminJid, { text: `🔔 *New Payment Screenshot!*\n\nOrder: *#${existingOrder.orderId}*\nCustomer: ${senderName}\nNumber: ${existingOrder.customerNumber}\n\nDashboard pe approve/reject karo! ⚡` });
-                } catch (e) {}
+                } catch (e) { }
             } else {
                 const lang = botData.customers[senderId]?.language || 'roman_urdu';
                 const aiReply = await getAISalesResponse('[Customer ne image bheja bina order ke]', senderId, senderName, lang);
@@ -1183,7 +1210,7 @@ async function handleMessage(sock, message) {
             botData.orderCounter++;
             const orderId = botData.orderCounter;
             const product = aiReply.product || botData.products[0];
-            botData.orders[senderId] = { orderId, customerJid: senderId, customerNumber: senderId.replace('@s.whatsapp.net', ''), customerName: senderName, productId: product?.id, language: lang, status: 'pending', hasScreenshot: false, timestamp: Date.now() };
+            botData.orders[orderId] = { orderId, customerJid: senderId, customerNumber: senderId.replace('@s.whatsapp.net', ''), customerName: senderName, productId: product?.id, language: lang, status: 'pending', hasScreenshot: false, timestamp: Date.now() };
             await saveData();
             await saveToSheet({ orderId, customerName: senderName, customerNumber: senderId.replace('@s.whatsapp.net', ''), product: product?.name, amount: product?.price, status: 'pending', language: lang });
             if (aiReply.message) {
@@ -1281,7 +1308,7 @@ async function startBot() {
                 console.log('✅ WhatsApp Connected! Mega Agency LIVE! 🚀');
                 await backupAuthToRedis();
                 setTimeout(processChatsFromStore, 5000);
-                await initSheet().catch(() => {});
+                await initSheet().catch(() => { });
             }
         });
 
@@ -1301,5 +1328,17 @@ async function startBot() {
     }
 }
 
-console.log('🚀 Mega Agency AI Sales Bot v6 — STARTING...');
-startBot();
+// Cleanup old salesHistory entries every 30 minutes
+setInterval(() => {
+    const keys = Object.keys(salesHistory);
+    if (keys.length > 200) {
+        keys.slice(0, keys.length - 200).forEach(k => delete salesHistory[k]);
+        console.log('\uD83E\uDDF9 Cleaned old sales histories');
+    }
+}, 30 * 60 * 1000);
+
+(async () => {
+    console.log('\uD83D\uDE80 Mega Agency AI Sales Bot v6 \u2014 STARTING...');
+    await loadData();
+    startBot();
+})();
