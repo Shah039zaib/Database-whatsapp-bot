@@ -56,33 +56,37 @@ async function backupAuthToRedis() {
         const files = fs.readdirSync(AUTH_DIR);
         if (!files.length) return;
         const authData = {};
-        let totalSize = 0;
         for (const file of files) {
             try {
                 const content = fs.readFileSync(path.join(AUTH_DIR, file), 'utf8');
                 authData[file] = content;
-                totalSize += content.length;
             } catch (e) { }
         }
-        if (totalSize > 400000) {
-            if (authData['creds.json']) {
-                await redisSet(AUTH_KEY, { 'creds.json': authData['creds.json'] });
-                console.log('⚠️ Auth large — only creds.json backed up');
-            }
-        } else {
-            await redisSet(AUTH_KEY, authData);
-            console.log(`✅ Auth backed up! (${Object.keys(authData).length} files, ~${Math.round(totalSize / 1024)}KB)`);
-        }
+        const zlib = require('zlib');
+        const compressed = zlib.gzipSync(Buffer.from(JSON.stringify(authData), 'utf8')).toString('base64');
+        await redisSet(AUTH_KEY, compressed);
+        console.log(`✅ Auth backed up! (${Object.keys(authData).length} files, ~${Math.round(compressed.length / 1024)}KB)`);
     } catch (e) { console.log('Auth backup error:', e.message); }
 }
 
 async function restoreAuthFromRedis() {
     try {
-        const authData = await redisGet(AUTH_KEY);
-        if (!authData || typeof authData !== 'object' || !Object.keys(authData).length) {
+        const payload = await redisGet(AUTH_KEY);
+        if (!payload) {
             console.log('ℹ️ No auth backup — fresh QR needed');
             return false;
         }
+        let authData;
+        if (typeof payload === 'object' && !Array.isArray(payload)) {
+            authData = payload; // legacy structure fallback
+        } else if (typeof payload === 'string') {
+            const zlib = require('zlib');
+            const uncompressed = zlib.gunzipSync(Buffer.from(payload, 'base64')).toString('utf8');
+            authData = JSON.parse(uncompressed);
+        } else {
+            return false;
+        }
+
         if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
         for (const [file, content] of Object.entries(authData)) {
             if (typeof content === 'string') fs.writeFileSync(path.join(AUTH_DIR, file), content, 'utf8');
@@ -922,6 +926,10 @@ let allData={};let products=[];let allChats=[];let selectedChats=new Set();let f
 async function loadData(){
     try{
         const r=await fetch('/api/data');
+        if (r.redirected && r.url.includes('/login')) {
+            window.location = '/login';
+            return;
+        }
         allData=await r.json();
         products=JSON.parse(JSON.stringify(allData.products||[]));
         renderAll();
@@ -1286,6 +1294,9 @@ async function startBot() {
                 const code = lastDisconnect?.error?.output?.statusCode;
                 const reason = lastDisconnect?.error?.message || '';
                 console.log(`❌ Disconnected — code: ${code} | reason: ${reason}`);
+
+                if (sock.isReconnecting) return;
+                sock.isReconnecting = true;
 
                 if (code === DisconnectReason.loggedOut || code === 401) {
                     botStatus = 'logged_out';
