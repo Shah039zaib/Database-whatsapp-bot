@@ -715,7 +715,7 @@ body{background:#0a0a0a;color:#e0e0e0;font-family:'Segoe UI',sans-serif;min-heig
 .sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:#111;border-right:1px solid #222;padding:20px 0;z-index:200;overflow-y:auto;pointer-events:auto;}
 .sidebar-logo{padding:15px 20px 25px;border-bottom:1px solid #222;margin-bottom:10px;}
 .sidebar-logo h2{color:#25D366;font-size:18px;}.sidebar-logo p{color:#666;font-size:11px;margin-top:3px;}
-.nav-item{display:flex;align-items:center;gap:10px;padding:12px 20px;cursor:pointer;color:#aaa;font-size:14px;transition:all 0.2s;border-left:3px solid transparent;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:12px 20px;cursor:pointer;color:#aaa;font-size:14px;transition:all 0.2s;border-left:3px solid transparent;text-decoration:none;outline:none;border:none;background:none;width:100%;text-align:left;}
 .nav-item:hover,.nav-item.active{background:#1a1a1a;color:#25D366;border-left-color:#25D366;}
 .main{margin-left:220px;width:calc(100% - 220px);padding:25px;min-height:100vh;position:relative;z-index:1;box-sizing:border-box;}
 .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;background:#111;padding:15px 20px;border-radius:12px;border:1px solid #222;flex-wrap:wrap;gap:10px;}
@@ -785,16 +785,16 @@ input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform
 <body>
 <div class="sidebar">
 <div class="sidebar-logo"><h2>🏪 Mega</h2><p>Admin Panel</p></div>
-<div class="nav-item active" id="nav-orders" data-page="orders"><span>📦</span><span>Orders</span></div>
-<div class="nav-item" id="nav-broadcast" data-page="broadcast"><span>📢</span><span>Broadcast</span></div>
-<div class="nav-item" id="nav-customers" data-page="customers"><span>👥</span><span>Customers</span></div>
-<div class="nav-item" id="nav-products" data-page="products"><span>🎨</span><span>Products</span></div>
-<div class="nav-item" id="nav-payment" data-page="payment"><span>💳</span><span>Payment</span></div>
-<div class="nav-item" id="nav-prompt" data-page="prompt"><span>🤖</span><span>AI Prompt</span></div>
-<div class="nav-item" id="nav-settings" data-page="settings"><span>⚙️</span><span>Settings</span></div>
-<div class="nav-item" data-href="/qr"><span>📱</span><span>QR Code</span></div>
-<div class="nav-item" data-action="reset-qr"><span>🔄</span><span>New QR</span></div>
-<div class="nav-item" data-href="/logout"><span>🚪</span><span>Logout</span></div>
+<div class="nav-item active" id="nav-orders" onclick="showPage('orders', this)"><span>📦</span><span>Orders</span></div>
+<div class="nav-item" id="nav-broadcast" onclick="showPage('broadcast', this)"><span>📢</span><span>Broadcast</span></div>
+<div class="nav-item" id="nav-customers" onclick="showPage('customers', this)"><span>👥</span><span>Customers</span></div>
+<div class="nav-item" id="nav-products" onclick="showPage('products', this)"><span>🎨</span><span>Products</span></div>
+<div class="nav-item" id="nav-payment" onclick="showPage('payment', this)"><span>💳</span><span>Payment</span></div>
+<div class="nav-item" id="nav-prompt" onclick="showPage('prompt', this)"><span>🤖</span><span>AI Prompt</span></div>
+<div class="nav-item" id="nav-settings" onclick="showPage('settings', this)"><span>⚙️</span><span>Settings</span></div>
+<a class="nav-item" href="/qr"><span>📱</span><span>QR Code</span></a>
+<button class="nav-item" type="button" onclick="doResetQr()"><span>🔄</span><span>New QR</span></button>
+<a class="nav-item" href="/logout"><span>🚪</span><span>Logout</span></a>
 </div>
 
 <div class="main">
