@@ -19,6 +19,24 @@ const crypto = require('crypto');
 const os = require('os');
 
 // ─────────────────────────────────────────
+// LOGGING SYSTEM WITH LEVELS
+// ─────────────────────────────────────────
+const LOG_LEVEL = {
+    SILENT: 0,
+    ERROR: 1,
+    WARN: 2,
+    INFO: 3,
+    DEBUG: 4
+};
+const CURRENT_LOG_LEVEL = LOG_LEVEL.INFO; // Only show ERROR, WARN, INFO (no DEBUG logs)
+
+function logBot(level, message) {
+    if (level > CURRENT_LOG_LEVEL) return;
+    const prefix = level === LOG_LEVEL.ERROR ? '❌' : level === LOG_LEVEL.WARN ? '⚠️' : '✅';
+    console.log(`${prefix} ${message}`);
+}
+
+// ─────────────────────────────────────────
 // UPSTASH REDIS
 // ─────────────────────────────────────────
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -264,6 +282,8 @@ let existingChats = [];
 let chatsLoaded = false;
 let globalStore = null;
 let botRestartCount = 0;
+let lastQRTime = 0;  // Track last QR time to prevent excessive reloading
+let qrRetryCount = 0;  // Track consecutive QR attempts
 
 function isAuthenticated(req) {
     const cookies = req.headers.cookie || '';
@@ -295,32 +315,45 @@ async function parseBody(req) {
 // ─────────────────────────────────────────
 function processChatsFromStore() {
     try {
-        const customerJids = new Set(Object.keys(botData.customers || {}));
         const newChats = [];
         const addedJids = new Set();
+        // Get admin's own number to exclude from broadcast
+        const adminNumber = botData.settings?.adminNumber || process.env.ADMIN_NUMBER || '';
+        const adminJid = adminNumber ? adminNumber + '@s.whatsapp.net' : '';
 
+        // Load chats from the WhatsApp store - only those with actual messages
         if (globalStore) {
             const chats = globalStore.chats.all();
             for (const chat of chats) {
                 if (!chat.id) continue;
+                // Skip groups, broadcasts, status, and newsletters
                 if (chat.id.endsWith('@g.us')) continue;
                 if (chat.id.endsWith('@broadcast')) continue;
                 if (chat.id === 'status@broadcast') continue;
                 if (chat.id.includes('newsletter')) continue;
-                if (!customerJids.has(chat.id)) continue;
+                // Skip admin's own number
+                if (adminJid && chat.id === adminJid) continue;
+                
+                // Only include chats that have messages (unreadCount > 0 or messages exist)
+                if (!chat.messages || chat.messages.length === 0) continue;
+                
                 const number = chat.id.replace('@s.whatsapp.net', '');
                 if (number.length < 10) continue;
+                
                 addedJids.add(chat.id);
                 newChats.push({
                     jid: chat.id, number,
-                    name: chat.name || chat.pushName || botData.customers[chat.id]?.name || number,
-                    lastMessage: chat.conversationTimestamp || 0
+                    name: chat.name || chat.pushName || botData.customers?.[chat.id]?.name || number,
+                    lastMessage: chat.conversationTimestamp || chat.messages?.[chat.messages.length - 1]?.messageTimestamp || 0
                 });
             }
         }
 
+        // Add bot conversation customers that aren't already from store
         for (const [jid, customer] of Object.entries(botData.customers || {})) {
             if (addedJids.has(jid)) continue;
+            // Skip admin's own number
+            if (adminJid && jid === adminJid) continue;
             const number = jid.replace('@s.whatsapp.net', '');
             if (number.length < 10) continue;
             newChats.push({
@@ -333,9 +366,9 @@ function processChatsFromStore() {
         newChats.sort((a, b) => b.lastMessage - a.lastMessage);
         existingChats = newChats;
         chatsLoaded = true;
-        console.log(`✅ ${newChats.length} customer chats loaded!`);
+        logBot(LOG_LEVEL.DEBUG, `${newChats.length} customer chats loaded!`);
     } catch (e) {
-        console.log('Chat process error:', e.message);
+        logBot(LOG_LEVEL.ERROR, `Chat process error: ${e.message}`);
         chatsLoaded = true;
     }
 }
@@ -1077,6 +1110,12 @@ async function savePrompt(){await fetch('/api/prompt',{method:'POST',headers:{'C
 function renderSettings(){const s=allData.settings||{};document.getElementById('s_bizName').value=s.businessName||'';document.getElementById('s_adminNum').value=s.adminNumber||'';}
 async function saveSettings(){const pw=document.getElementById('s_password').value;const data={businessName:document.getElementById('s_bizName').value,adminNumber:document.getElementById('s_adminNum').value,dashboardPassword:pw||allData.settings?.dashboardPassword};await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});showToast('✅ Settings Saved!');document.getElementById('s_password').value='';}
 
+// Helper functions that must be defined before use
+function showToast(msg){const t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',3000);}
+function openMsg(jid){const modal=document.getElementById('msgModal');const jidInput=document.getElementById('msgJid');if(modal&&jidInput){jidInput.value=jid;modal.classList.add('show');}}
+function closeModal(){const modal=document.getElementById('msgModal');if(modal)modal.classList.remove('show');}
+async function sendCustomMsg(){const jid=document.getElementById('msgJid').value;const message=document.getElementById('msgText').value;if(!message.trim())return;await fetch('/api/send-message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jid,message})});showToast('✅ Message Sent!');closeModal();document.getElementById('msgText').value='';}
+
 // Expose all functions to window globally
 window.showPage=function(page, el){
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -1097,7 +1136,11 @@ window.showPage=function(page, el){
     const mainEl=document.querySelector('.main');
     if(mainEl) mainEl.scrollTop=0;
 };
-window.doResetQr=async function(){if(!confirm('🔄 WhatsApp session delete karein aur naya QR generate karein?\\nBot temporarily disconnect hoga!'))return;showToast('⏳ Auth clearing...');const r=await fetch('/api/reset-qr',{method:'POST'});const d=await r.json();if(d.success){showToast('✅ Redirecting to QR...');setTimeout(()=>window.location='/qr',2500);}else showToast('❌ Error!');};
+window.doResetQr=async function(){if(!confirm('🔄 WhatsApp session delete karein aur naya QR generate karein?\\nBot temporarily disconnect hoga!'))return;window.showToast('⏳ Auth clearing...');const r=await fetch('/api/reset-qr',{method:'POST'});const d=await r.json();if(d.success){window.showToast('✅ Redirecting to QR...');setTimeout(()=>window.location='/qr',2500);}else window.showToast('❌ Error!');};
+window.showToast=showToast;
+window.openMsg=openMsg;
+window.closeModal=closeModal;
+window.sendCustomMsg=sendCustomMsg;
 window.generateMsg=generateMsg;
 window.sendBroadcast=sendBroadcast;
 window.cancelBroadcast=cancelBroadcast;
@@ -1107,9 +1150,6 @@ window.filterChats=filterChats;
 window.toggleChat=toggleChat;
 window.approveOrder=approveOrder;
 window.rejectOrder=rejectOrder;
-window.openMsg=openMsg;
-window.closeModal=closeModal;
-window.sendCustomMsg=sendCustomMsg;
 window.loadData=loadData;
 window.loadChats=loadChats;
 window.savePayment=savePayment;
@@ -1268,11 +1308,16 @@ async function handleMessage(sock, message) {
 async function startBot() {
     try {
         botRestartCount++;
-        console.log(`🚀 Bot start attempt #${botRestartCount}`);
+        logBot(LOG_LEVEL.INFO, `Bot start attempt #${botRestartCount}`);
+
+        // Reset reconnecting flag
+        if (sockGlobal) {
+            sockGlobal.isReconnecting = false;
+        }
 
         // Restore auth from Redis before anything
         const restored = await restoreAuthFromRedis();
-        console.log(restored ? '✅ Session restored from Redis!' : 'ℹ️ No saved session — QR scan needed');
+        if (restored) logBot(LOG_LEVEL.DEBUG, 'Session restored from Redis!');
 
         // Ensure auth dir exists
         if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
@@ -1287,16 +1332,17 @@ async function startBot() {
             auth: state,
             logger: pino({ level: 'silent' }),
             browser: Browsers.ubuntu('Chrome'),
-            connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 60000,
-            keepAliveIntervalMs: 25000,
+            connectTimeoutMs: 120000,        // Increased from 60s to 120s
+            defaultQueryTimeoutMs: 120000,   // Increased from 60s to 120s
+            keepAliveIntervalMs: 30000,      // Increased from 25s to 30s
             emitOwnEvents: false,
             markOnlineOnConnect: false,
             generateHighQualityLinkPreview: false,
             syncFullHistory: false,
-            retryRequestDelayMs: 2000,
-            maxMsgRetryCount: 5,
+            retryRequestDelayMs: 3000,       // Increased from 2s to 3s
+            maxMsgRetryCount: 3,             // Reduced from 5 to 3
             fireInitQueries: true,
+            getMessage: async () => proto.Message.fromObject({}), // Default empty message
         });
 
         globalStore.bind(sock.ev);
@@ -1312,28 +1358,55 @@ async function startBot() {
             const { connection, lastDisconnect, qr } = update;
 
             if (qr) {
-                currentQR = qr;
-                botStatus = 'qr_ready';
-                console.log(`✅ QR Ready! (attempt #${botRestartCount}) — Go to /qr to scan!`);
+                // Track QR attempts
+                const now = Date.now();
+                if (now - lastQRTime < 5000) {
+                    qrRetryCount++;
+                } else {
+                    qrRetryCount = 1;
+                }
+                lastQRTime = now;
+
+                // Prevent QR spam - if too many attempts, log it but don't abort
+                if (qrRetryCount > 3) {
+                    logBot(LOG_LEVEL.WARN, `Multiple QR attempts (${qrRetryCount}) - Please scan the new QR`);
+                } else {
+                    currentQR = qr;
+                    botStatus = 'qr_ready';
+                    logBot(LOG_LEVEL.DEBUG, `QR Ready! (attempt #${botRestartCount})`);
+                }
             }
 
             if (connection === 'close') {
                 currentQR = null;
                 const code = lastDisconnect?.error?.output?.statusCode;
                 const reason = lastDisconnect?.error?.message || '';
-                console.log(`❌ Disconnected — code: ${code} | reason: ${reason}`);
+                logBot(LOG_LEVEL.WARN, `Disconnected — code: ${code} | reason: ${reason}`);
 
                 if (sock.isReconnecting) return;
                 sock.isReconnecting = true;
 
+                // Handle different disconnect scenarios
                 if (code === DisconnectReason.loggedOut || code === 401) {
+                    // Session invalid - clear and start fresh
                     botStatus = 'logged_out';
                     await clearAllAuth();
                     setTimeout(startBot, 3000);
+                } else if (code === 408) {
+                    // QR timeout - session expired, try reconnecting without clearing (will show new QR)
+                    botStatus = 'reconnecting';
+                    setTimeout(startBot, 5000);
                 } else if (code === 405 || code === 428) {
+                    // Conflict or conflict with existing session
                     botStatus = 'reconnecting';
                     setTimeout(startBot, 20000);
+                } else if (code === 440) {
+                    // Stream error - network issue
+                    botStatus = 'reconnecting';
+                    const delay = Math.min(3000 * botRestartCount, 15000);
+                    setTimeout(startBot, delay);
                 } else {
+                    // Other temporary disconnects
                     botStatus = 'reconnecting';
                     const delay = Math.min(5000 * botRestartCount, 30000);
                     setTimeout(startBot, delay);
@@ -1344,7 +1417,9 @@ async function startBot() {
                 currentQR = null;
                 botStatus = 'connected';
                 botRestartCount = 0;
-                console.log('✅ WhatsApp Connected! Mega Agency LIVE! 🚀');
+                qrRetryCount = 0;  // Reset QR retry count on successful connection
+                lastQRTime = 0;    // Reset QR timer
+                logBot(LOG_LEVEL.INFO, '✅ WhatsApp Connected! Mega Agency LIVE! 🚀');
                 await backupAuthToRedis();
                 setTimeout(processChatsFromStore, 5000);
                 await initSheet().catch(() => { });
