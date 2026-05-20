@@ -1050,6 +1050,31 @@ async function doResetQr(){
     else showToast('❌ Error!');
 }
 
+window.doResetQr=doResetQr;
+window.generateMsg=generateMsg;
+window.sendBroadcast=sendBroadcast;
+window.cancelBroadcast=cancelBroadcast;
+window.selectAll=selectAll;
+window.deselectAll=deselectAll;
+window.filterChats=filterChats;
+window.toggleChat=toggleChat;
+window.approveOrder=approveOrder;
+window.rejectOrder=rejectOrder;
+window.openMsg=openMsg;
+window.closeModal=closeModal;
+window.sendCustomMsg=sendCustomMsg;
+window.loadData=loadData;
+window.loadChats=loadChats;
+window.savePayment=savePayment;
+window.savePrompt=savePrompt;
+window.saveSettings=saveSettings;
+window.saveProducts=saveProducts;
+window.addProduct=addProduct;
+window.removeProduct=removeProduct;
+window.addFeature=addFeature;
+window.removeFeature=removeFeature;
+window.showToast=showToast;
+
 function renderBcHistory(){
     const bcs=allData.broadcasts||[];
     document.getElementById('bcHistory').innerHTML=bcs.length===0?'<div class="empty">📭 Koi broadcast nahi</div>':bcs.map(b=>{
@@ -1086,7 +1111,7 @@ async function savePrompt(){await fetch('/api/prompt',{method:'POST',headers:{'C
 function renderSettings(){const s=allData.settings||{};document.getElementById('s_bizName').value=s.businessName||'';document.getElementById('s_adminNum').value=s.adminNumber||'';}
 async function saveSettings(){const pw=document.getElementById('s_password').value;const data={businessName:document.getElementById('s_bizName').value,adminNumber:document.getElementById('s_adminNum').value,dashboardPassword:pw||allData.settings?.dashboardPassword};await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});showToast('✅ Settings Saved!');document.getElementById('s_password').value='';}
 
-function showPage(page, el){
+window.showPage=function(page, el){
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
     const pageEl=document.getElementById('page-'+page);
@@ -1101,10 +1126,10 @@ function showPage(page, el){
     if(gridEl) gridEl.style.display=showStats?'grid':'none';
     const revEl=document.getElementById('revenueCard');
     if(revEl) revEl.style.display=showStats?'block':'none';
-    if(page==='broadcast') loadChats();
+    if(page==='broadcast') window.loadChats();
     const mainEl=document.querySelector('.main');
     if(mainEl) mainEl.scrollTop=0;
-}
+};
 
 function initSidebar(){
     const sidebar=document.querySelector('.sidebar');
@@ -1113,13 +1138,12 @@ function initSidebar(){
         const item=e.target.closest('.nav-item');
         if(!item) return;
         const page=item.getAttribute('data-page');
-        if(page){ showPage(page,item); return; }
+        if(page){ window.showPage(page,item); return; }
         const href=item.getAttribute('data-href');
         if(href){ window.location.href=href; return; }
-        if(item.getAttribute('data-action')==='reset-qr') doResetQr();
+        if(item.getAttribute('data-action')==='reset-qr') window.doResetQr();
     });
 }
-window.showPage=showPage;
 
 function openMsg(jid){document.getElementById('msgJid').value=jid;document.getElementById('msgModal').classList.add('show');}
 function closeModal(){document.getElementById('msgModal').classList.remove('show');}
