@@ -1339,7 +1339,7 @@ async function startBot() {
             emitOwnEvents: false,
             markOnlineOnConnect: false,
             generateHighQualityLinkPreview: false,
-            syncFullHistory: false,
+            syncFullHistory: true,
             retryRequestDelayMs: 3000,       // Increased from 2s to 3s
             maxMsgRetryCount: 3,             // Reduced from 5 to 3
             fireInitQueries: true,
@@ -1429,6 +1429,34 @@ async function startBot() {
 
         sock.ev.on('chats.upsert', () => processChatsFromStore());
         sock.ev.on('chats.set', () => setTimeout(processChatsFromStore, 2000));
+        sock.ev.on('messaging-history.set', async ({ chats }) => {
+            try {
+                if (!botData.customers) botData.customers = {};
+                const adminNumber = botData.settings?.adminNumber || process.env.ADMIN_NUMBER || '';
+                const adminJid = adminNumber ? adminNumber + '@s.whatsapp.net' : '';
+
+                for (const chat of (chats || [])) {
+                    const jid = chat.id;
+                    if (!jid || !jid.endsWith('@s.whatsapp.net')) continue;
+                    if (adminJid && jid === adminJid) continue;
+                    const number = jid.replace('@s.whatsapp.net', '');
+                    if (number.length < 10) continue;
+
+                    if (!botData.customers[jid]) {
+                        botData.customers[jid] = {
+                            jid, number,
+                            name: chat.name || number,
+                            lastSeen: Date.now(),
+                            language: 'roman_urdu'
+                        };
+                    }
+                }
+                await saveData();
+                processChatsFromStore();
+            } catch (e) {
+                logBot(LOG_LEVEL.ERROR, `Error in messaging-history.set: ${e.message}`);
+            }
+        });
 
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             if (type !== 'notify') return;
