@@ -1161,7 +1161,6 @@ window.removeProduct=removeProduct;
 window.addFeature=addFeature;
 window.removeFeature=removeFeature;
 
-initSidebar();
 loadData();
 setInterval(loadData,15000);
 setInterval(()=>{const p=document.getElementById('page-broadcast');if(p&&p.classList.contains('active'))loadChats();},30000);
