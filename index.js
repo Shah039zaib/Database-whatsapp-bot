@@ -55,9 +55,8 @@ async function redisGet(key) {
 
 async function redisSet(key, value) {
     try {
-        await axios.post(
-            `${REDIS_URL}/set/${encodeURIComponent(key)}`,
-            JSON.stringify(value), // body IS the value
+        await axios.post(`${REDIS_URL}/set/${encodeURIComponent(key)}`,
+            JSON.stringify(value),
             { headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' }, timeout: 8000 }
         );
         return true;
@@ -269,6 +268,8 @@ async function saveData() {
     } catch (e) { console.log('Save error:', e.message); }
 }
 
+// loadData() moved to startup sequence at bottom
+
 // ─────────────────────────────────────────
 // BOT STATE
 // ─────────────────────────────────────────
@@ -318,24 +319,29 @@ function processChatsFromStore() {
     try {
         const newChats = [];
         const addedJids = new Set();
+        // Get admin's own number to exclude from broadcast
         const adminNumber = botData.settings?.adminNumber || process.env.ADMIN_NUMBER || '';
         const adminJid = adminNumber ? adminNumber + '@s.whatsapp.net' : '';
 
+        // Load chats from the WhatsApp store - only those with actual messages
         if (globalStore) {
             const chats = globalStore.chats.all();
             for (const chat of chats) {
                 if (!chat.id) continue;
+                // Skip groups, broadcasts, status, and newsletters
                 if (chat.id.endsWith('@g.us')) continue;
                 if (chat.id.endsWith('@broadcast')) continue;
                 if (chat.id === 'status@broadcast') continue;
                 if (chat.id.includes('newsletter')) continue;
+                // Skip admin's own number
                 if (adminJid && chat.id === adminJid) continue;
-
+                
+                // Only include chats that have messages (unreadCount > 0 or messages exist)
                 if (!chat.messages || chat.messages.length === 0) continue;
-
+                
                 const number = chat.id.replace('@s.whatsapp.net', '');
                 if (number.length < 10) continue;
-
+                
                 addedJids.add(chat.id);
                 newChats.push({
                     jid: chat.id, number,
@@ -345,8 +351,10 @@ function processChatsFromStore() {
             }
         }
 
+        // Add bot conversation customers that aren't already from store
         for (const [jid, customer] of Object.entries(botData.customers || {})) {
             if (addedJids.has(jid)) continue;
+            // Skip admin's own number
             if (adminJid && jid === adminJid) continue;
             const number = jid.replace('@s.whatsapp.net', '');
             if (number.length < 10) continue;
@@ -554,6 +562,7 @@ const server = http.createServer(async (req, res) => {
         if (pathname === '/qr') {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             const resetScript = `<script>async function resetQr(){if(!confirm('New QR generate karein? Session delete hoga!'))return;const r=await fetch('/api/reset-qr',{method:'POST'});const d=await r.json();if(d.success){alert('✅ Auth cleared! 3 sec mein naya QR...');setTimeout(()=>location.reload(),3500);}}</script>`;
+            const btnStyle = `style="background:#e74c3c;color:white;border:none;padding:10px 22px;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;margin-top:12px;"`;
 
             if (botStatus === 'connected') {
                 res.end(`<!DOCTYPE html><html><head><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;gap:12px;}h2{color:#25D366;}p{color:#aaa;}a{color:#25D366;font-size:16px;text-decoration:none;}.btn{padding:10px 22px;border:none;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;margin-top:4px;}</style></head><body><h2>✅ Bot Connected!</h2><p>Mega Agency Bot live hai! 🎉</p><a href="/dashboard">📊 Dashboard Kholo</a><button class="btn" style="background:#e74c3c;color:white;" onclick="resetQr()">🔄 Naya QR Generate Karo</button>${resetScript}</body></html>`);
@@ -730,7 +739,435 @@ const server = http.createServer(async (req, res) => {
         // MAIN DASHBOARD
         if (pathname === '/dashboard' || pathname === '/') {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(DASHBOARD_HTML());
+            res.end(`<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<title>${botData.settings.businessName} - Admin</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#0a0a0a;color:#e0e0e0;font-family:'Segoe UI',sans-serif;min-height:100vh;}
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:#111;border-right:1px solid #222;padding:20px 0;z-index:200;overflow-y:auto;pointer-events:auto;}
+.sidebar-logo{padding:15px 20px 25px;border-bottom:1px solid #222;margin-bottom:10px;}
+.sidebar-logo h2{color:#25D366;font-size:18px;}.sidebar-logo p{color:#666;font-size:11px;margin-top:3px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:12px 20px;cursor:pointer;color:#aaa;font-size:14px;transition:all 0.2s;border-left:3px solid transparent;text-decoration:none;outline:none;border:none;background:none;width:100%;text-align:left;}
+.nav-item:hover,.nav-item.active{background:#1a1a1a;color:#25D366;border-left-color:#25D366;}
+.main{margin-left:220px;width:calc(100% - 220px);padding:25px;min-height:100vh;position:relative;z-index:1;box-sizing:border-box;}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;background:#111;padding:15px 20px;border-radius:12px;border:1px solid #222;flex-wrap:wrap;gap:10px;}
+.topbar h1{font-size:20px;color:white;}
+.bot-badge{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:bold;}
+.badge-live{background:#0d2b0d;color:#25D366;border:1px solid #25D366;}
+.badge-off{background:#2b0d0d;color:#e74c3c;border:1px solid #e74c3c;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px;}
+.stat-card{background:#111;border-radius:12px;padding:18px;text-align:center;border:1px solid #222;}
+.stat-card h2{font-size:28px;font-weight:bold;margin-bottom:4px;}.stat-card p{color:#666;font-size:11px;}
+.section{background:#111;border-radius:12px;border:1px solid #222;margin-bottom:20px;overflow:hidden;}
+.section-header{padding:15px 20px;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+.section-header h3{font-size:15px;color:white;}.section-body{padding:18px;}
+.order-card{background:#0f0f0f;border-radius:10px;padding:14px;margin-bottom:10px;border:1px solid #222;}
+.order-card.pending{border-left:4px solid #f39c12;}.order-card.approved{border-left:4px solid #25D366;}.order-card.rejected{border-left:4px solid #e74c3c;}.order-card.cancelled{border-left:4px solid #9b59b6;}.order-card.running{border-left:4px solid #3498db;}
+.order-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;}
+.order-id{font-weight:bold;color:#25D366;font-size:15px;}
+.badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:bold;}
+.bp{background:#f39c12;color:black;}.ba{background:#25D366;color:black;}.br{background:#e74c3c;color:white;}.bc{background:#9b59b6;color:white;}
+.order-info{font-size:13px;color:#aaa;line-height:1.9;}.order-info b{color:white;}
+.btn-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+.btn{padding:7px 16px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;text-decoration:none;display:inline-block;}
+.btn-green{background:#25D366;color:black;}.btn-red{background:#e74c3c;color:white;}.btn-blue{background:#3498db;color:white;}.btn-gray{background:#333;color:white;}.btn-purple{background:#9b59b6;color:white;}.btn-orange{background:#f39c12;color:black;}
+.form-group{margin-bottom:15px;}.form-group label{display:block;color:#aaa;font-size:13px;margin-bottom:6px;}
+.form-group input,.form-group textarea,.form-group select{width:100%;padding:10px 14px;background:#0f0f0f;border:1px solid #333;border-radius:8px;color:white;font-size:14px;outline:none;}
+.form-group input:focus,.form-group textarea:focus,.form-group select:focus{border-color:#25D366;}
+.form-group textarea{resize:vertical;min-height:100px;font-family:'Segoe UI',sans-serif;}
+.save-btn{background:#25D366;color:black;border:none;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer;}
+.product-card{background:#0f0f0f;border-radius:10px;padding:16px;margin-bottom:12px;border:1px solid #222;}
+.product-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+.product-name{font-size:16px;font-weight:bold;color:white;}
+.toggle{position:relative;width:44px;height:24px;}.toggle input{opacity:0;width:0;height:0;}
+.slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#333;border-radius:24px;transition:.4s;}
+.slider:before{position:absolute;content:"";height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.4s;}
+input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform:translateX(20px);}
+.feature-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+.feature-tag{background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:4px 10px;font-size:12px;color:#aaa;display:flex;align-items:center;gap:5px;}
+.feature-tag button{background:none;border:none;color:#e74c3c;cursor:pointer;font-size:14px;}
+.feature-input{display:flex;gap:8px;margin-top:8px;}.feature-input input{flex:1;}
+.feature-input button{background:#25D366;color:black;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:bold;}
+.page{display:none;}.page.active{display:block;}
+.empty{text-align:center;color:#444;padding:30px;font-size:14px;}
+.revenue-card{background:linear-gradient(135deg,#1a2e1a,#1a1a2e);border-radius:12px;padding:18px;text-align:center;border:1px solid #25D36640;margin-bottom:20px;}
+.revenue-card h2{color:#f39c12;font-size:32px;font-weight:bold;}
+.info-box{background:#1a2b1a;border:1px solid #25D36640;border-radius:8px;padding:12px 15px;margin-bottom:15px;font-size:13px;color:#25D366;}
+.warn-box{background:#2b1a0d;border:1px solid #f39c1240;border-radius:8px;padding:12px 15px;margin-bottom:15px;font-size:13px;color:#f39c12;}
+.danger-box{background:#2b0d0d;border:1px solid #e74c3c40;border-radius:8px;padding:15px;margin-top:20px;}
+.chat-item{background:#0f0f0f;border-radius:8px;padding:10px 14px;margin-bottom:6px;border:1px solid #222;display:flex;align-items:center;gap:10px;cursor:pointer;}
+.chat-item:hover{background:#1a1a1a;}.chat-item.selected{border-color:#25D366;background:#0d2b0d;}
+.chat-avatar{width:36px;height:36px;border-radius:50%;background:#25D36633;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.chat-info{flex:1;min-width:0;}
+.chat-name{font-weight:bold;color:white;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.chat-number{color:#aaa;font-size:12px;}
+.progress-bar{background:#222;border-radius:10px;height:8px;margin-top:10px;overflow:hidden;}
+.progress-fill{background:#25D366;height:100%;border-radius:10px;transition:width 0.3s;}
+.msg-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#000000aa;z-index:200;align-items:center;justify-content:center;}
+.msg-modal.show{display:flex;}
+.msg-box{background:#1a1a1a;border-radius:16px;padding:25px;width:90%;max-width:400px;border:1px solid #333;}
+.msg-box h3{margin-bottom:15px;color:white;}
+.toast{position:fixed;bottom:20px;right:20px;background:#25D366;color:black;padding:12px 20px;border-radius:10px;font-weight:bold;font-size:14px;z-index:999;display:none;}
+@media(max-width:768px){
+.sidebar{width:60px;}.sidebar-logo p,.nav-item span:last-child{display:none;}
+.nav-item{justify-content:center;}.main{margin-left:60px;width:calc(100% - 60px);padding:15px;}.stats-grid{grid-template-columns:repeat(2,1fr);}
+}
+</style>
+</head>
+<body>
+<div class="sidebar">
+<div class="sidebar-logo"><h2>🏪 Mega</h2><p>Admin Panel</p></div>
+<div class="nav-item active" id="nav-orders" onclick="showPage('orders', this)"><span>📦</span><span>Orders</span></div>
+<div class="nav-item" id="nav-broadcast" onclick="showPage('broadcast', this)"><span>📢</span><span>Broadcast</span></div>
+<div class="nav-item" id="nav-customers" onclick="showPage('customers', this)"><span>👥</span><span>Customers</span></div>
+<div class="nav-item" id="nav-products" onclick="showPage('products', this)"><span>🎨</span><span>Products</span></div>
+<div class="nav-item" id="nav-payment" onclick="showPage('payment', this)"><span>💳</span><span>Payment</span></div>
+<div class="nav-item" id="nav-prompt" onclick="showPage('prompt', this)"><span>🤖</span><span>AI Prompt</span></div>
+<div class="nav-item" id="nav-settings" onclick="showPage('settings', this)"><span>⚙️</span><span>Settings</span></div>
+<a class="nav-item" href="/qr"><span>📱</span><span>QR Code</span></a>
+<button class="nav-item" type="button" onclick="doResetQr()"><span>🔄</span><span>New QR</span></button>
+<a class="nav-item" href="/logout"><span>🚪</span><span>Logout</span></a>
+</div>
+
+<div class="main">
+<div class="topbar">
+<h1 id="pageTitle">📦 Orders</h1>
+<div style="display:flex;gap:10px;align-items:center;">
+<span class="bot-badge" id="botBadge">⏳ Loading...</span>
+<button class="btn btn-gray" onclick="loadData()" style="padding:6px 12px;font-size:12px;">🔄 Reload</button>
+</div></div>
+
+<div class="stats-grid" id="statsGrid"></div>
+<div class="revenue-card" id="revenueCard"><p>💰 Total Revenue</p><h2 id="revenue">PKR 0</h2><p id="revenueDetail">0 orders approved</p></div>
+
+<!-- ORDERS -->
+<div class="page active" id="page-orders">
+<div class="section"><div class="section-header"><h3>⏳ Pending Orders</h3></div><div class="section-body" id="pendingOrders"><div class="empty">Loading...</div></div></div>
+<div class="section"><div class="section-header"><h3>✅ Approved Orders</h3></div><div class="section-body" id="approvedOrders"><div class="empty">Loading...</div></div></div>
+<div class="section"><div class="section-header"><h3>❌ Rejected Orders</h3></div><div class="section-body" id="rejectedOrders"><div class="empty">Loading...</div></div></div>
+</div>
+
+<!-- BROADCAST -->
+<div class="page" id="page-broadcast">
+<div class="section"><div class="section-header"><h3>🤖 AI Message Generator</h3></div><div class="section-body">
+<div class="info-box">🤖 AI tumhara offer message generate karega automatically!</div>
+<div class="form-group"><label>Offer Details (AI ko batao kya offer hai)</label><textarea id="offerDetails" rows="3" placeholder="e.g. 100+ Shopify themes bundle sirf PKR 999 mein — limited time offer!"></textarea></div>
+<div class="form-group"><label>Message Type</label>
+<select id="msgType"><option value="personalized">👤 Personalized (har customer ke naam se)</option><option value="same">📢 Same message sab ko</option></select></div>
+<button class="btn btn-purple" onclick="generateMsg()" id="genBtn">🤖 AI Se Message Generate Karo</button>
+<div id="generatedMsg" style="display:none;margin-top:15px;">
+<div class="form-group"><label>✏️ Generated Message (edit kar sakte ho)</label><textarea id="msgPreview" rows="6"></textarea></div>
+</div>
+</div></div>
+
+<div class="section"><div class="section-header">
+<h3>👥 Customers Select Karo</h3>
+<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+<button class="btn btn-green" onclick="selectAll()">✅ Select All</button>
+<button class="btn btn-gray" onclick="deselectAll()">❌ Deselect</button>
+<span id="selCount" style="color:#25D366;font-size:13px;font-weight:bold;"></span>
+</div>
+</div><div class="section-body">
+<div style="margin-bottom:12px;">
+<div class="form-group"><label>⏱️ Delay Between Messages (seconds)</label><input type="number" id="bc_delay" value="5" min="1" max="60" onchange="updateBcPreview()"/></div>
+<input type="text" id="chatSearch" placeholder="🔍 Search customers..." oninput="filterChats()" style="width:100%;padding:10px;background:#0f0f0f;border:1px solid #333;border-radius:8px;color:white;outline:none;margin-bottom:8px;"/>
+</div>
+<div id="chatStatus" style="text-align:center;color:#25D366;padding:20px;font-size:14px;">🔌 Bot connect hone ke baad customers load honge...</div>
+<div id="chatsList"></div>
+</div></div>
+
+<div class="section"><div class="section-header"><h3>📤 Send Broadcast</h3></div><div class="section-body">
+<div id="bcPreview" style="color:#aaa;font-size:13px;margin-bottom:15px;background:#0f0f0f;padding:10px;border-radius:8px;"></div>
+<div class="btn-row">
+<button class="btn btn-green" onclick="sendBroadcast()" style="flex:1;padding:12px;font-size:15px;">📤 Broadcast Bhejo</button>
+<button class="btn btn-red" onclick="cancelBroadcast()" id="cancelBtn" style="display:none;padding:12px 20px;">🛑 Cancel</button>
+</div>
+<div id="bcProgress" style="display:none;margin-top:15px;">
+<p style="color:#25D366;font-size:14px;margin-bottom:6px;" id="bcProgressText">⏳ Broadcast running...</p>
+<div class="progress-bar"><div class="progress-fill" id="bcProgressFill" style="width:0%"></div></div>
+</div>
+</div></div>
+
+<div class="section"><div class="section-header"><h3>📋 Broadcast History</h3></div><div class="section-body" id="bcHistory"><div class="empty">Loading...</div></div></div>
+</div>
+
+<!-- CUSTOMERS -->
+<div class="page" id="page-customers">
+<div class="section"><div class="section-header"><h3>👥 All Customers</h3><span id="custCount" style="color:#aaa;font-size:13px;"></span></div>
+<div class="section-body" id="custList"><div class="empty">Loading...</div></div>
+</div></div>
+
+<!-- PRODUCTS -->
+<div class="page" id="page-products">
+<div class="section"><div class="section-header"><h3>🎨 Products</h3><button class="btn btn-green" onclick="addProduct()">➕ Add Product</button></div>
+<div class="section-body" id="productsList"></div>
+</div></div>
+
+<!-- PAYMENT -->
+<div class="page" id="page-payment">
+<div class="section"><div class="section-header"><h3>💳 Payment Details</h3></div><div class="section-body">
+<h4 style="color:#25D366;margin-bottom:15px;">📱 EasyPaisa</h4>
+<div class="form-group"><label>Number</label><input id="ep_number" placeholder="03XX-XXXXXXX"/></div>
+<div class="form-group"><label>Account Name</label><input id="ep_name" placeholder="Tumhara Naam"/></div>
+<h4 style="color:#25D366;margin:15px 0;">📱 JazzCash</h4>
+<div class="form-group"><label>Number</label><input id="jc_number" placeholder="03XX-XXXXXXX"/></div>
+<div class="form-group"><label>Account Name</label><input id="jc_name" placeholder="Tumhara Naam"/></div>
+<h4 style="color:#25D366;margin:15px 0;">🏦 Bank Account</h4>
+<div class="form-group"><label>Bank Name</label><input id="bank_name" placeholder="HBL"/></div>
+<div class="form-group"><label>Account Number</label><input id="bank_acc" placeholder="XXXXXXXXXXXXXXX"/></div>
+<div class="form-group"><label>Account Holder Name</label><input id="bank_holder" placeholder="Tumhara Naam"/></div>
+<div class="form-group"><label>IBAN</label><input id="bank_iban" placeholder="PK00XXXX..."/></div>
+<button class="save-btn" onclick="savePayment()">💾 Save Payment Details</button>
+</div></div></div>
+
+<!-- AI PROMPT -->
+<div class="page" id="page-prompt">
+<div class="section"><div class="section-header"><h3>🤖 AI Sales Agent Prompt</h3></div><div class="section-body">
+<div class="warn-box">⚠️ ORDER_READY word zaroor rakho! Price negotiation rules strong rakho!</div>
+<div class="form-group"><label>System Prompt</label><textarea id="aiPrompt" rows="20" style="min-height:400px;"></textarea></div>
+<button class="save-btn" onclick="savePrompt()">💾 Save Prompt</button>
+</div></div></div>
+
+<!-- SETTINGS -->
+<div class="page" id="page-settings">
+<div class="section"><div class="section-header"><h3>⚙️ Settings</h3></div><div class="section-body">
+<div class="form-group"><label>Business Name</label><input id="s_bizName" placeholder="Mega Agency"/></div>
+<div class="form-group"><label>Admin WhatsApp Number (92XXXXXXXXXX)</label><input id="s_adminNum" placeholder="923001234567"/></div>
+<div class="form-group"><label>Dashboard Password (khali chhodo agar same rakho)</label><input id="s_password" type="password" placeholder="New password..."/></div>
+<button class="save-btn" onclick="saveSettings()">💾 Save Settings</button>
+<div class="danger-box">
+<h4 style="color:#e74c3c;margin-bottom:10px;">⚠️ Danger Zone</h4>
+<p style="color:#aaa;font-size:13px;margin-bottom:12px;">WhatsApp session delete karke naya QR generate karo — bot temporarily disconnect hoga</p>
+<button class="btn btn-red" onclick="doResetQr()">🔄 Regenerate WhatsApp QR</button>
+</div>
+</div></div></div>
+</div>
+
+<!-- Message Modal -->
+<div class="msg-modal" id="msgModal">
+<div class="msg-box"><h3>💬 Custom Message Bhejo</h3>
+<input type="hidden" id="msgJid"/>
+<div class="form-group"><label>Message</label><textarea id="msgText" rows="4" placeholder="Yahan message likho..."></textarea></div>
+<div class="btn-row">
+<button class="btn btn-green" onclick="sendCustomMsg()">📤 Send</button>
+<button class="btn btn-gray" onclick="closeModal()">❌ Cancel</button>
+</div></div></div>
+<div class="toast" id="toast">✅ Done!</div>
+
+<script>
+let allData={};let products=[];let allChats=[];let selectedChats=new Set();let filteredChats=[];
+
+async function loadData(){
+    try{
+        const r=await fetch('/api/data');
+        if (r.redirected && r.url.includes('/login')) {
+            window.location = '/login';
+            return;
+        }
+        allData=await r.json();
+        products=JSON.parse(JSON.stringify(allData.products||[]));
+        renderAll();
+        const cb=document.getElementById('cancelBtn');
+        if(cb)cb.style.display=allData.broadcastRunning?'block':'none';
+    }catch(e){console.error(e);}
+}
+
+function renderAll(){
+    const badge=document.getElementById('botBadge');
+    if(allData.botStatus==='connected'){badge.className='bot-badge badge-live';badge.textContent='✅ Bot Live';}
+    else{badge.className='bot-badge badge-off';badge.textContent='⚠️ '+(allData.botStatus||'offline');}
+    const s=allData.stats||{};
+    document.getElementById('statsGrid').innerHTML=\`
+    <div class="stat-card" style="border-top:3px solid #f39c12"><h2 style="color:#f39c12">\${s.pending||0}</h2><p>⏳ Pending</p></div>
+    <div class="stat-card" style="border-top:3px solid #25D366"><h2 style="color:#25D366">\${s.approved||0}</h2><p>✅ Approved</p></div>
+    <div class="stat-card" style="border-top:3px solid #e74c3c"><h2 style="color:#e74c3c">\${s.rejected||0}</h2><p>❌ Rejected</p></div>
+    <div class="stat-card" style="border-top:3px solid #3498db"><h2 style="color:#3498db">\${s.customers||0}</h2><p>👥 Customers</p></div>\`;
+    document.getElementById('revenue').textContent='PKR '+(s.revenue||0).toLocaleString();
+    document.getElementById('revenueDetail').textContent=(s.approved||0)+' orders approved';
+    renderOrders();renderBcHistory();renderCustomers();renderProducts();renderPayment();renderPrompt();renderSettings();
+}
+
+function orderCard(o){
+    const time=new Date(o.timestamp).toLocaleString('en-PK');
+    const bc=o.status==='pending'?'bp':o.status==='approved'?'ba':'br';
+    const lb=o.language?'<span style="background:#333;padding:2px 8px;border-radius:10px;font-size:11px;color:#aaa;">'+o.language+'</span>':'';
+    const acts=o.status==='pending'?\`<button class="btn btn-green" onclick="approveOrder(\${o.orderId})">✅ Approve</button><button class="btn btn-red" onclick="rejectOrder(\${o.orderId})">❌ Reject</button><button class="btn btn-blue" onclick="openMsg('\${o.customerJid}')">💬 Message</button>\`:\`<button class="btn btn-blue" onclick="openMsg('\${o.customerJid}')">💬 Message</button>\`;
+    return \`<div class="order-card \${o.status}"><div class="order-header"><span class="order-id">#\${o.orderId}</span><div style="display:flex;gap:6px;">\${lb}<span class="badge \${bc}">\${o.status.toUpperCase()}</span></div></div><div class="order-info">📱 Number: <b>\${o.customerNumber}</b><br>👤 Name: <b>\${o.customerName||'N/A'}</b><br>📸 Screenshot: <b>\${o.hasScreenshot?'✅ Received':'❌ Pending'}</b><br>📅 Time: <b>\${time}</b></div><div class="btn-row">\${acts}</div></div>\`;
+}
+
+function renderOrders(){
+    const orders=Object.values(allData.orders||{}).sort((a,b)=>b.timestamp-a.timestamp);
+    const p=orders.filter(o=>o.status==='pending');const a=orders.filter(o=>o.status==='approved');const r=orders.filter(o=>o.status==='rejected');
+    document.getElementById('pendingOrders').innerHTML=p.length===0?'<div class="empty">📭 Koi pending order nahi</div>':p.map(orderCard).join('');
+    document.getElementById('approvedOrders').innerHTML=a.length===0?'<div class="empty">📭 Koi approved order nahi</div>':a.map(orderCard).join('');
+    document.getElementById('rejectedOrders').innerHTML=r.length===0?'<div class="empty">📭 Koi rejected order nahi</div>':r.map(orderCard).join('');
+}
+
+async function approveOrder(id){if(!confirm('✅ Approve karein?'))return;await fetch('/api/approve/'+id,{method:'POST'});showToast('✅ Approved!');loadData();}
+async function rejectOrder(id){if(!confirm('❌ Reject karein?'))return;await fetch('/api/reject/'+id,{method:'POST'});showToast('❌ Rejected!');loadData();}
+
+async function loadChats(){
+    try{const r=await fetch('/api/chats');const d=await r.json();allChats=d.chats||[];filteredChats=[...allChats];renderChats();}catch(e){}
+}
+
+function renderChats(){
+    const cs=document.getElementById('chatStatus');const cl=document.getElementById('chatsList');
+    if(allChats.length===0){
+        cs.style.display='block';
+        cs.textContent=allData.botStatus==='connected'?'👥 Abhi tak koi customer nahi aaya...':'🔌 Bot connect karo pehle!';
+        cl.innerHTML='';updateSelCount();return;
+    }
+    cs.style.display='none';
+    cl.innerHTML=filteredChats.map(c=>\`<div class="chat-item \${selectedChats.has(c.jid)?'selected':''}" onclick="toggleChat('\${c.jid}')">
+    <div class="chat-avatar">👤</div>
+    <div class="chat-info"><div class="chat-name">\${c.name||c.number}</div><div class="chat-number">\${c.number}</div></div>
+    <input type="checkbox" \${selectedChats.has(c.jid)?'checked':''} onclick="event.stopPropagation()"/>
+    </div>\`).join('');
+    updateSelCount();updateBcPreview();
+}
+
+function toggleChat(jid){if(selectedChats.has(jid))selectedChats.delete(jid);else selectedChats.add(jid);renderChats();}
+function selectAll(){filteredChats.forEach(c=>selectedChats.add(c.jid));renderChats();showToast('✅ '+selectedChats.size+' selected!');}
+function deselectAll(){selectedChats.clear();renderChats();}
+function filterChats(){const q=document.getElementById('chatSearch').value.toLowerCase();filteredChats=allChats.filter(c=>(c.name||'').toLowerCase().includes(q)||(c.number||'').includes(q));renderChats();}
+function updateSelCount(){const el=document.getElementById('selCount');if(el)el.textContent=selectedChats.size>0?selectedChats.size+' selected':'';}
+function updateBcPreview(){const d=parseInt(document.getElementById('bc_delay')?.value||5);const el=document.getElementById('bcPreview');if(el)el.innerHTML=selectedChats.size>0?\`📊 <b style="color:white">\${selectedChats.size}</b> customers | ⏱️ Delay: <b style="color:white">\${d}s</b> | ⏳ Est: <b style="color:white">\${Math.ceil(selectedChats.size*d/60)} min</b>\`:'Contacts select karo';}
+
+async function generateMsg(){
+    const offer=document.getElementById('offerDetails').value;
+    if(!offer.trim()){showToast('⚠️ Offer details likho!');return;}
+    const btn=document.getElementById('genBtn');btn.textContent='⏳ Generating...';btn.disabled=true;
+    const personalized=document.getElementById('msgType').value==='personalized';
+    try{
+        const r=await fetch('/api/generate-message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({offerDetails:offer,customerName:'Dost',personalized})});
+        const d=await r.json();
+        if(d.success){document.getElementById('msgPreview').value=d.message;document.getElementById('generatedMsg').style.display='block';showToast('✅ Message generated!');}
+        else showToast('❌ Error: '+(d.error||''));
+    }catch(e){showToast('❌ Error!');}
+    btn.textContent='🤖 AI Se Message Generate Karo';btn.disabled=false;updateBcPreview();
+}
+
+async function sendBroadcast(){
+    const msg=document.getElementById('msgPreview')?.value||'';
+    const offer=document.getElementById('offerDetails').value;
+    const personalized=document.getElementById('msgType').value==='personalized';
+    const delay=parseInt(document.getElementById('bc_delay').value)||5;
+    if(!msg.trim()&&!offer.trim()){showToast('⚠️ Pehle message generate karo!');return;}
+    if(selectedChats.size===0){showToast('⚠️ Customers select karo!');return;}
+    if(!confirm('📤 '+selectedChats.size+' customers ko message bhejein?'))return;
+    const contacts=allChats.filter(c=>selectedChats.has(c.jid)).map(c=>({jid:c.jid,name:c.name||c.number,number:c.number}));
+    document.getElementById('bcProgress').style.display='block';
+    document.getElementById('cancelBtn').style.display='block';
+    try{
+        const r=await fetch('/api/smart-broadcast',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({offerDetails:offer,baseMessage:msg,personalized,delaySeconds:delay,selectedContacts:contacts})});
+        const d=await r.json();
+        if(d.success)showToast('📤 Broadcast shuru! '+contacts.length+' messages jaayenge.');
+        else showToast('❌ '+(d.error||'Error'));
+    }catch(e){showToast('❌ Error: '+e.message);}
+}
+
+async function cancelBroadcast(){
+    if(!confirm('🛑 Broadcast cancel karein?'))return;
+    const r=await fetch('/api/cancel-broadcast',{method:'POST'});
+    const d=await r.json();
+    if(d.success){showToast('🛑 Broadcast cancelled!');document.getElementById('cancelBtn').style.display='none';document.getElementById('bcProgress').style.display='none';loadData();}
+}
+
+function renderBcHistory(){
+    const bcs=allData.broadcasts||[];
+    document.getElementById('bcHistory').innerHTML=bcs.length===0?'<div class="empty">📭 Koi broadcast nahi</div>':bcs.map(b=>{
+        const icon=b.status==='completed'?'✅':b.status==='cancelled'?'🛑':b.status==='running'?'⏳':'📋';
+        const cls=b.status==='completed'?'approved':b.status==='cancelled'?'cancelled':b.status==='running'?'running':'pending';
+        return\`<div class="order-card \${cls}"><div class="order-header"><span class="order-id">\${icon} \${b.status.toUpperCase()}</span><span style="color:#aaa;font-size:12px;">\${new Date(b.createdAt).toLocaleString('en-PK')}</span></div><div class="order-info">\${(b.baseMessage||b.offerDetails||'').substring(0,80)}...<br>✅ Sent: <b>\${b.sentCount||0}</b> | ❌ Failed: <b>\${b.failedCount||0}</b> | 📊 Total: <b>\${b.totalContacts||0}</b> | ⏱️ <b>\${b.delaySeconds}s</b></div></div>\`;
+    }).join('');
+}
+
+function renderCustomers(){
+    const cs=Object.values(allData.customers||{}).sort((a,b)=>b.lastSeen-a.lastSeen);
+    const cc=document.getElementById('custCount');if(cc)cc.textContent=cs.length+' total';
+    document.getElementById('custList').innerHTML=cs.length===0?'<div class="empty">📭 Koi customer nahi abhi</div>':cs.map(c=>\`<div style="background:#0f0f0f;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid #222;display:flex;justify-content:space-between;align-items:center;"><div><p style="font-weight:bold;color:white;">\${c.name||'Unknown'}</p><p style="color:#aaa;font-size:12px;">\${c.number} • \${c.language||'?'} • \${new Date(c.lastSeen).toLocaleDateString('en-PK')}</p></div><button class="btn btn-blue" onclick="openMsg('\${c.jid}')">💬</button></div>\`).join('');
+}
+
+function renderProducts(){
+    const el=document.getElementById('productsList');
+    if(!products.length){el.innerHTML='<div class="empty">📭 Koi product nahi</div>';return;}
+    el.innerHTML=products.map((p,i)=>\`<div class="product-card"><div class="product-header"><span class="product-name">\${p.name}</span><label class="toggle"><input type="checkbox" \${p.active?'checked':''} onchange="products[\${i}].active=this.checked"/><span class="slider"></span></label></div><div class="form-group"><label>Product Name</label><input value="\${p.name}" onchange="products[\${i}].name=this.value"/></div><div class="form-group"><label>Price (PKR)</label><input type="number" value="\${p.price}" onchange="products[\${i}].price=parseInt(this.value)"/></div><div class="form-group"><label>Description</label><textarea onchange="products[\${i}].description=this.value">\${p.description}</textarea></div><div class="form-group"><label>Download Link</label><input value="\${p.downloadLink||''}" placeholder="https://drive.google.com/..." onchange="products[\${i}].downloadLink=this.value"/></div><div class="form-group"><label>Features</label><div class="feature-list">\${(p.features||[]).map((f,j)=>\`<div class="feature-tag">\${f}<button onclick="removeFeature(\${i},\${j})">×</button></div>\`).join('')}</div><div class="feature-input"><input id="newFeature_\${i}" placeholder="New feature..." onkeypress="if(event.key==='Enter')addFeature(\${i})"/><button onclick="addFeature(\${i})">+ Add</button></div></div><div class="btn-row"><button class="btn btn-green" onclick="saveProducts()">💾 Save</button><button class="btn btn-red" onclick="removeProduct(\${i})">🗑️ Delete</button></div></div>\`).join('');
+}
+
+function addFeature(i){const inp=document.getElementById('newFeature_'+i);if(!inp.value.trim())return;if(!products[i].features)products[i].features=[];products[i].features.push(inp.value.trim());inp.value='';renderProducts();}
+function removeFeature(i,j){products[i].features.splice(j,1);renderProducts();}
+function addProduct(){products.push({id:Date.now(),name:'New Product',price:999,description:'',features:[],downloadLink:'',active:false});renderProducts();}
+function removeProduct(i){if(confirm('🗑️ Delete karo?')){products.splice(i,1);renderProducts();}}
+async function saveProducts(){await fetch('/api/products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(products)});showToast('✅ Products Saved!');loadData();}
+
+function renderPayment(){const p=allData.payment||{};document.getElementById('ep_number').value=p.easypaisa?.number||'';document.getElementById('ep_name').value=p.easypaisa?.name||'';document.getElementById('jc_number').value=p.jazzcash?.number||'';document.getElementById('jc_name').value=p.jazzcash?.name||'';document.getElementById('bank_name').value=p.bank?.bankName||'';document.getElementById('bank_acc').value=p.bank?.accountNumber||'';document.getElementById('bank_holder').value=p.bank?.accountName||'';document.getElementById('bank_iban').value=p.bank?.iban||'';}
+async function savePayment(){const data={easypaisa:{number:document.getElementById('ep_number').value,name:document.getElementById('ep_name').value},jazzcash:{number:document.getElementById('jc_number').value,name:document.getElementById('jc_name').value},bank:{bankName:document.getElementById('bank_name').value,accountNumber:document.getElementById('bank_acc').value,accountName:document.getElementById('bank_holder').value,iban:document.getElementById('bank_iban').value}};await fetch('/api/payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});showToast('✅ Payment Details Saved!');}
+
+function renderPrompt(){document.getElementById('aiPrompt').value=allData.aiPrompt||'';}
+async function savePrompt(){await fetch('/api/prompt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:document.getElementById('aiPrompt').value})});showToast('✅ AI Prompt Saved!');}
+
+function renderSettings(){const s=allData.settings||{};document.getElementById('s_bizName').value=s.businessName||'';document.getElementById('s_adminNum').value=s.adminNumber||'';}
+async function saveSettings(){const pw=document.getElementById('s_password').value;const data={businessName:document.getElementById('s_bizName').value,adminNumber:document.getElementById('s_adminNum').value,dashboardPassword:pw||allData.settings?.dashboardPassword};await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});showToast('✅ Settings Saved!');document.getElementById('s_password').value='';}
+
+// Helper functions that must be defined before use
+function showToast(msg){const t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',3000);}
+function openMsg(jid){const modal=document.getElementById('msgModal');const jidInput=document.getElementById('msgJid');if(modal&&jidInput){jidInput.value=jid;modal.classList.add('show');}}
+function closeModal(){const modal=document.getElementById('msgModal');if(modal)modal.classList.remove('show');}
+async function sendCustomMsg(){const jid=document.getElementById('msgJid').value;const message=document.getElementById('msgText').value;if(!message.trim())return;await fetch('/api/send-message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jid,message})});showToast('✅ Message Sent!');closeModal();document.getElementById('msgText').value='';}
+
+// Expose all functions to window globally
+window.showPage=function(page, el){
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    const pageEl=document.getElementById('page-'+page);
+    if(pageEl) pageEl.classList.add('active');
+    const navEl=el||document.getElementById('nav-'+page);
+    if(navEl) navEl.classList.add('active');
+    const titles={orders:'📦 Orders',broadcast:'📢 Smart Broadcast',customers:'👥 Customers',products:'🎨 Products',payment:'💳 Payment',prompt:'🤖 AI Prompt',settings:'⚙️ Settings'};
+    const titleEl=document.getElementById('pageTitle');
+    if(titleEl) titleEl.textContent=titles[page]||page;
+    const showStats=(page==='orders');
+    const gridEl=document.getElementById('statsGrid');
+    if(gridEl) gridEl.style.display=showStats?'grid':'none';
+    const revEl=document.getElementById('revenueCard');
+    if(revEl) revEl.style.display=showStats?'block':'none';
+    if(page==='broadcast') window.loadChats();
+    const mainEl=document.querySelector('.main');
+    if(mainEl) mainEl.scrollTop=0;
+};
+window.doResetQr=async function(){if(!confirm('🔄 WhatsApp session delete karein aur naya QR generate karein?\\nBot temporarily disconnect hoga!'))return;window.showToast('⏳ Auth clearing...');const r=await fetch('/api/reset-qr',{method:'POST'});const d=await r.json();if(d.success){window.showToast('✅ Redirecting to QR...');setTimeout(()=>window.location='/qr',2500);}else window.showToast('❌ Error!');};
+window.showToast=showToast;
+window.openMsg=openMsg;
+window.closeModal=closeModal;
+window.sendCustomMsg=sendCustomMsg;
+window.generateMsg=generateMsg;
+window.sendBroadcast=sendBroadcast;
+window.cancelBroadcast=cancelBroadcast;
+window.selectAll=selectAll;
+window.deselectAll=deselectAll;
+window.filterChats=filterChats;
+window.toggleChat=toggleChat;
+window.approveOrder=approveOrder;
+window.rejectOrder=rejectOrder;
+window.loadData=loadData;
+window.loadChats=loadChats;
+window.savePayment=savePayment;
+window.savePrompt=savePrompt;
+window.saveSettings=saveSettings;
+window.saveProducts=saveProducts;
+window.addProduct=addProduct;
+window.removeProduct=removeProduct;
+window.addFeature=addFeature;
+window.removeFeature=removeFeature;
+
+loadData();
+setInterval(loadData,15000);
+setInterval(()=>{const p=document.getElementById('page-broadcast');if(p&&p.classList.contains('active'))loadChats();},30000);
+</script>
+</body></html>`);
             return;
         }
 
@@ -874,14 +1311,16 @@ async function startBot() {
         botRestartCount++;
         logBot(LOG_LEVEL.INFO, `Bot start attempt #${botRestartCount}`);
 
+        // Reset reconnecting flag
         if (sockGlobal) {
             sockGlobal.isReconnecting = false;
         }
 
         // Restore auth from Redis before anything
         const restored = await restoreAuthFromRedis();
-        if (restored) logBot(LOG_LEVEL.INFO, 'Session restored from Redis!');
+        if (restored) logBot(LOG_LEVEL.DEBUG, 'Session restored from Redis!');
 
+        // Ensure auth dir exists
         if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
 
         const { version } = await fetchLatestBaileysVersion();
@@ -894,17 +1333,17 @@ async function startBot() {
             auth: state,
             logger: pino({ level: 'silent' }),
             browser: Browsers.ubuntu('Chrome'),
-            connectTimeoutMs: 120000,
-            defaultQueryTimeoutMs: 120000,
-            keepAliveIntervalMs: 30000,
+            connectTimeoutMs: 120000,        // Increased from 60s to 120s
+            defaultQueryTimeoutMs: 120000,   // Increased from 60s to 120s
+            keepAliveIntervalMs: 30000,      // Increased from 25s to 30s
             emitOwnEvents: false,
             markOnlineOnConnect: false,
             generateHighQualityLinkPreview: false,
             syncFullHistory: false,
-            retryRequestDelayMs: 3000,
-            maxMsgRetryCount: 3,
+            retryRequestDelayMs: 3000,       // Increased from 2s to 3s
+            maxMsgRetryCount: 3,             // Reduced from 5 to 3
             fireInitQueries: true,
-            getMessage: async () => proto.Message.fromObject({})
+            getMessage: async () => proto.Message.fromObject({}), // Default empty message
         });
 
         globalStore.bind(sock.ev);
@@ -920,6 +1359,7 @@ async function startBot() {
             const { connection, lastDisconnect, qr } = update;
 
             if (qr) {
+                // Track QR attempts
                 const now = Date.now();
                 if (now - lastQRTime < 5000) {
                     qrRetryCount++;
@@ -928,6 +1368,7 @@ async function startBot() {
                 }
                 lastQRTime = now;
 
+                // Prevent QR spam - if too many attempts, log it but don't abort
                 if (qrRetryCount > 3) {
                     logBot(LOG_LEVEL.WARN, `Multiple QR attempts (${qrRetryCount}) - Please scan the new QR`);
                 } else {
@@ -946,21 +1387,27 @@ async function startBot() {
                 if (sock.isReconnecting) return;
                 sock.isReconnecting = true;
 
+                // Handle different disconnect scenarios
                 if (code === DisconnectReason.loggedOut || code === 401) {
+                    // Session invalid - clear and start fresh
                     botStatus = 'logged_out';
                     await clearAllAuth();
                     setTimeout(startBot, 3000);
                 } else if (code === 408) {
+                    // QR timeout - session expired, try reconnecting without clearing (will show new QR)
                     botStatus = 'reconnecting';
                     setTimeout(startBot, 5000);
                 } else if (code === 405 || code === 428) {
+                    // Conflict or conflict with existing session
                     botStatus = 'reconnecting';
                     setTimeout(startBot, 20000);
                 } else if (code === 440) {
+                    // Stream error - network issue
                     botStatus = 'reconnecting';
                     const delay = Math.min(3000 * botRestartCount, 15000);
                     setTimeout(startBot, delay);
                 } else {
+                    // Other temporary disconnects
                     botStatus = 'reconnecting';
                     const delay = Math.min(5000 * botRestartCount, 30000);
                     setTimeout(startBot, delay);
@@ -971,8 +1418,8 @@ async function startBot() {
                 currentQR = null;
                 botStatus = 'connected';
                 botRestartCount = 0;
-                qrRetryCount = 0;
-                lastQRTime = 0;
+                qrRetryCount = 0;  // Reset QR retry count on successful connection
+                lastQRTime = 0;    // Reset QR timer
                 logBot(LOG_LEVEL.INFO, '✅ WhatsApp Connected! Mega Agency LIVE! 🚀');
                 await backupAuthToRedis();
                 setTimeout(processChatsFromStore, 5000);
@@ -1001,12 +1448,12 @@ setInterval(() => {
     const keys = Object.keys(salesHistory);
     if (keys.length > 200) {
         keys.slice(0, keys.length - 200).forEach(k => delete salesHistory[k]);
-        console.log('🧹 Cleaned old sales histories');
+        console.log('\uD83E\uDDF9 Cleaned old sales histories');
     }
 }, 30 * 60 * 1000);
 
 (async () => {
-    console.log('🚀 Mega Agency AI Sales Bot v6 — STARTING...');
+    console.log('\uD83D\uDE80 Mega Agency AI Sales Bot v6 \u2014 STARTING...');
     await loadData();
     startBot();
 })();
