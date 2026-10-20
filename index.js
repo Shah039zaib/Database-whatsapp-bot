@@ -585,6 +585,48 @@ const server = http.createServer(async (req, res) => {
         }
 
 
+        // FEATURE 5: Pairing code (QR ka alternative) — auth required
+        if (pathname === '/api/pairing-code' && req.method === 'POST') {
+            try {
+                const body = await parseBody(req);
+                let phone = String(body.phone || '').replace(/\D/g, '');
+                if (phone.length < 10 || phone.length > 15) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Sahi phone number likho (digits only)!' }));
+                    return;
+                }
+                if (!sockGlobal || botStatus === 'connected') {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: botStatus === 'connected' ? 'Bot pehle se connected hai!' : 'Bot starting hai, thoda ruko...' }));
+                    return;
+                }
+                const code = await sockGlobal.requestPairingCode(phone);
+                console.log('Pairing code generated for ' + phone);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, code }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'Pairing code fail: ' + e.message }));
+            }
+            return;
+        }
+
+        // FEATURE 6: manual customer tag — auth required
+        if (pathname === '/api/customer-tag' && req.method === 'POST') {
+            const body = await parseBody(req);
+            const c = (botData.customers || {})[body.jid];
+            if (!c || ['new','repeat','vip'].indexOf(body.tag) < 0) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'Invalid jid/tag' }));
+                return;
+            }
+            c.tag = body.tag; c.tagManual = true;
+            await saveData();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, tag: c.tag }));
+            return;
+        }
+
         // HEALTH CHECK — public, no auth (Render + monitoring)
         if (pathname === '/healthz') {
             let redisOk = false;
@@ -599,7 +641,7 @@ const server = http.createServer(async (req, res) => {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 status: 'ok', botStatus, chatsLoaded,
-                uptimeSec: Math.floor(process.uptime()), redisOk, version: '3.0.0'
+                uptimeSec: Math.floor(process.uptime()), redisOk, version: '3.1.0'
             }));
             return;
         }
@@ -620,7 +662,7 @@ const server = http.createServer(async (req, res) => {
             }
             try {
                 const qrDataURL = await QRCode.toDataURL(currentQR, { width: 300, margin: 2 });
-                res.end(`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="15"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;padding:20px;gap:10px;}h2{color:#25D366;}img{border:8px solid white;border-radius:12px;width:280px;height:280px;}.steps{background:#222;padding:15px;border-radius:10px;text-align:left;max-width:320px;}p{color:#aaa;}.btn-row{display:flex;gap:10px;justify-content:center;margin-top:5px;}.btn{padding:10px 20px;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;}</style></head><body><h2>📱 WhatsApp QR Code</h2><img src="${qrDataURL}"/><div class="steps"><p>1️⃣ WhatsApp kholo</p><p>2️⃣ 3 dots → Linked Devices</p><p>3️⃣ Link a Device</p><p>4️⃣ QR scan karo</p></div><p style="color:#f39c12;">⚠️ 15 sec mein refresh — auto-refresh hoga</p><div class="btn-row"><button class="btn" style="background:#25D366;color:black;" onclick="location.reload()">🔄 Refresh</button><button class="btn" style="background:#e74c3c;color:white;" onclick="resetQr()">🗑️ Naya QR</button></div>${resetScript}</body></html>`);
+                res.end(`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="15"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;padding:20px;gap:10px;}h2{color:#25D366;}img{border:8px solid white;border-radius:12px;width:280px;height:280px;}.steps{background:#222;padding:15px;border-radius:10px;text-align:left;max-width:320px;}p{color:#aaa;}.btn-row{display:flex;gap:10px;justify-content:center;margin-top:5px;}.btn{padding:10px 20px;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;}</style></head><body><h2>📱 WhatsApp QR Code</h2><img src="${qrDataURL}"/><div class="steps"><p>1️⃣ WhatsApp kholo</p><p>2️⃣ 3 dots → Linked Devices</p><p>3️⃣ Link a Device</p><p>4️⃣ QR scan karo</p></div><p style="color:#f39c12;">⚠️ 15 sec mein refresh — auto-refresh hoga</p><div style="background:#222;padding:15px;border-radius:10px;max-width:320px;margin-top:5px;"><p style="color:#25D366;font-weight:bold;margin-bottom:8px;">📲 QR ki jagah Code se Link karo</p><input id="pairPhone" placeholder="923001234567" style="width:100%;padding:10px;border-radius:8px;border:1px solid #444;background:#111;color:white;margin-bottom:8px;"/><button class="btn" style="background:#3498db;color:white;width:100%;" onclick="getPairCode()">🔑 Pairing Code Lao</button><p id="pairCode" style="font-size:28px;letter-spacing:8px;color:#f39c12;margin-top:10px;font-weight:bold;"></p><p style="font-size:11px;color:#888;">WhatsApp > Linked Devices > Link a Device > "Link with phone number"</p></div><script>async function getPairCode(){const ph=document.getElementById("pairPhone").value;const r=await fetch("/api/pairing-code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:ph})});const d=await r.json();document.getElementById("pairCode").textContent=d.success?d.code:("❌ "+(d.error||"Error"));}</script><div class="btn-row"><button class="btn" style="background:#25D366;color:black;" onclick="location.reload()">🔄 Refresh</button><button class="btn" style="background:#e74c3c;color:white;" onclick="resetQr()">🗑️ Naya QR</button></div>${resetScript}</body></html>`);
             } catch (err) { res.end('<h1 style="color:red">QR Error: ' + err.message + '</h1>'); }
             return;
         }
@@ -724,7 +766,7 @@ const server = http.createServer(async (req, res) => {
         if (pathname === '/api/settings' && req.method === 'POST') {
             const b = await parseBody(req);
             if (!b || typeof b !== 'object' || Array.isArray(b)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: 'Invalid data' })); return; }
-            botData.settings = { ...botData.settings, businessName: b.businessName || botData.settings.businessName, adminNumber: b.adminNumber || botData.settings.adminNumber, dashboardPassword: b.dashboardPassword || botData.settings.dashboardPassword, currency: b.currency || botData.settings.currency };
+            botData.settings = { ...botData.settings, businessName: b.businessName || botData.settings.businessName, adminNumber: b.adminNumber || botData.settings.adminNumber, dashboardPassword: b.dashboardPassword || botData.settings.dashboardPassword, currency: b.currency || botData.settings.currency, voiceReplies: b.voiceReplies === true, followupEnabled: b.followupEnabled !== false };
             await saveData();
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: true })); return;
         }
@@ -751,7 +793,8 @@ const server = http.createServer(async (req, res) => {
             const orderId = parseInt(pathname.split('/api/approve/')[1]);
             const order = Object.values(botData.orders).find(o => o.orderId === orderId);
             if (order && sockGlobal) {
-                order.status = 'approved'; await saveData();
+                order.status = 'approved'; computeTag(order.customerJid);
+                await saveData();
                 const product = botData.products.find(p => p.id === order.productId) || botData.products[0];
                 try {
                     let msg = `🎉 *Payment Approved!*\n\nOrder *#${order.orderId}* confirm ho gaya!\n\n📦 *${product.name}*\n\n`;
@@ -997,7 +1040,7 @@ input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform
 <div class="section"><div class="section-header"><h3>⚙️ Settings</h3></div><div class="section-body">
 <div class="form-group"><label>Business Name</label><input id="s_bizName" placeholder="Mega Agency"/></div>
 <div class="form-group"><label>Admin WhatsApp Number (92XXXXXXXXXX)</label><input id="s_adminNum" placeholder="923001234567"/></div>
-<div class="form-group"><label>Dashboard Password (khali chhodo agar same rakho)</label><input id="s_password" type="password" placeholder="New password..."/></div>
+<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="s_voice" style="width:auto;" onchange="saveSettings()"> 🎤 AI Voice Replies (customer ko voice note bhejo)</label></div><div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="s_followup" style="width:auto;" checked onchange="saveSettings()"> ⏰ 24h Follow-up Reminder (khamosh customer ko)</label></div><div class="form-group"><label>Dashboard Password (khali chhodo agar same rakho)</label><input id="s_password" type="password" placeholder="New password..."/></div>
 <button class="save-btn" onclick="saveSettings()">💾 Save Settings</button>
 <div class="danger-box">
 <h4 style="color:#e74c3c;margin-bottom:10px;">⚠️ Danger Zone</h4>
@@ -1019,6 +1062,9 @@ input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform
 <div class="toast" id="toast">✅ Done!</div>
 
 <script>
+.tagbadge{font-size:10px;padding:2px 8px;border-radius:10px;color:#fff;cursor:pointer;margin-left:6px;}.tag-new{background:#555;}.tag-repeat{background:#3498db;}.tag-vip{background:#f39c12;color:#000;}
+async function cycleTag(jid,cur){const order=['new','repeat','vip'];const next=order[(order.indexOf(cur)+1)%3];await fetch('/api/customer-tag',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jid,tag:next})});loadData();}
+function setVal(id,v){var el=document.getElementById(id);if(el&&document.activeElement!==el)el.value=(v==null?'':v);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 let allData={};let products=[];let allChats=[];let selectedChats=new Set();let filteredChats=[];
 
@@ -1150,7 +1196,7 @@ function renderBcHistory(){
 function renderCustomers(){
     const cs=Object.values(allData.customers||{}).sort((a,b)=>b.lastSeen-a.lastSeen);
     const cc=document.getElementById('custCount');if(cc)cc.textContent=cs.length+' total';
-    document.getElementById('custList').innerHTML=cs.length===0?'<div class="empty">📭 Koi customer nahi abhi</div>':cs.map(c=>\`<div style="background:#0f0f0f;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid #222;display:flex;justify-content:space-between;align-items:center;"><div><p style="font-weight:bold;color:white;">\${esc(c.name||'Unknown')}</p><p style="color:#aaa;font-size:12px;">\${c.number} • \${c.language||'?'} • \${new Date(c.lastSeen).toLocaleDateString('en-PK')}</p></div><button class="btn btn-blue" onclick="openMsg('\${c.jid}')">💬</button></div>\`).join('');
+    document.getElementById('custList').innerHTML=cs.length===0?'<div class="empty">📭 Koi customer nahi abhi</div>':cs.map(c=>\`<div style="background:#0f0f0f;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid #222;display:flex;justify-content:space-between;align-items:center;"><div><p style="font-weight:bold;color:white;">\${esc(c.name||'Unknown')} <span class='tagbadge tag-'+(c.tag||'new')+'' onclick="event.stopPropagation();cycleTag('\${c.jid}','\${c.tag||'new'}')" title='Tag badlo'>\${(c.tag||'new').toUpperCase()}</span></p><p style="color:#aaa;font-size:12px;">\${c.number} • \${c.language||'?'} • \${new Date(c.lastSeen).toLocaleDateString('en-PK')}</p></div><button class="btn btn-blue" onclick="openMsg('\${c.jid}')">💬</button></div>\`).join('');
 }
 
 function renderProducts(){
@@ -1165,14 +1211,14 @@ function addProduct(){products.push({id:Date.now(),name:'New Product',price:999,
 function removeProduct(i){if(confirm('🗑️ Delete karo?')){products.splice(i,1);renderProducts();}}
 async function saveProducts(){await fetch('/api/products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(products)});showToast('✅ Products Saved!');loadData();}
 
-function renderPayment(){const p=allData.payment||{};document.getElementById('ep_number').value=p.easypaisa?.number||'';document.getElementById('ep_name').value=p.easypaisa?.name||'';document.getElementById('jc_number').value=p.jazzcash?.number||'';document.getElementById('jc_name').value=p.jazzcash?.name||'';document.getElementById('bank_name').value=p.bank?.bankName||'';document.getElementById('bank_acc').value=p.bank?.accountNumber||'';document.getElementById('bank_holder').value=p.bank?.accountName||'';document.getElementById('bank_iban').value=p.bank?.iban||'';}
+function renderPayment(){const p=allData.payment||{};setVal('ep_number',p.easypaisa&&p.easypaisa.number);setVal('ep_name',p.easypaisa&&p.easypaisa.name);setVal('jc_number',p.jazzcash&&p.jazzcash.number);setVal('jc_name',p.jazzcash&&p.jazzcash.name);setVal('bank_name',p.bank&&p.bank.bankName);setVal('bank_acc',p.bank&&p.bank.accountNumber);setVal('bank_holder',p.bank&&p.bank.accountName);setVal('bank_iban',p.bank&&p.bank.iban);}
 async function savePayment(){const data={easypaisa:{number:document.getElementById('ep_number').value,name:document.getElementById('ep_name').value},jazzcash:{number:document.getElementById('jc_number').value,name:document.getElementById('jc_name').value},bank:{bankName:document.getElementById('bank_name').value,accountNumber:document.getElementById('bank_acc').value,accountName:document.getElementById('bank_holder').value,iban:document.getElementById('bank_iban').value}};await fetch('/api/payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});showToast('✅ Payment Details Saved!');}
 
-function renderPrompt(){document.getElementById('aiPrompt').value=allData.aiPrompt||'';}
+function renderPrompt(){setVal('aiPrompt',allData.aiPrompt);}
 async function savePrompt(){await fetch('/api/prompt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:document.getElementById('aiPrompt').value})});showToast('✅ AI Prompt Saved!');}
 
-function renderSettings(){const s=allData.settings||{};document.getElementById('s_bizName').value=s.businessName||'';document.getElementById('s_adminNum').value=s.adminNumber||'';}
-async function saveSettings(){const pw=document.getElementById('s_password').value;const data={businessName:document.getElementById('s_bizName').value,adminNumber:document.getElementById('s_adminNum').value,dashboardPassword:pw||allData.settings?.dashboardPassword};await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});showToast('✅ Settings Saved!');document.getElementById('s_password').value='';}
+function renderSettings(){const s=allData.settings||{};setVal('s_bizName',s.businessName);setVal('s_adminNum',s.adminNumber);var sv=document.getElementById('s_voice');if(sv&&document.activeElement!==sv)sv.checked=!!s.voiceReplies;var sf=document.getElementById('s_followup');if(sf&&document.activeElement!==sf)sf.checked=s.followupEnabled!==false;}
+async function saveSettings(){const pw=document.getElementById('s_password').value;const data={businessName:document.getElementById('s_bizName').value,adminNumber:document.getElementById('s_adminNum').value,dashboardPassword:pw||undefined,voiceReplies:document.getElementById('s_voice').checked,followupEnabled:document.getElementById('s_followup').checked};await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});showToast('✅ Settings Saved!');document.getElementById('s_password').value='';document.getElementById('s_voice').checked=!!(allData.settings&&allData.settings.voiceReplies);document.getElementById('s_followup').checked=allData.settings?allData.settings.followupEnabled!==false:true;}
 
 // Helper functions that must be defined before use
 function showToast(msg){const t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',3000);}
@@ -1266,11 +1312,15 @@ async function handleMessage(sock, message) {
         const msgType = Object.keys(message.message || {})[0];
 
         if (!botData.customers) botData.customers = {};
+        const prevCust = botData.customers[senderId] || {};
         botData.customers[senderId] = {
             jid: senderId,
             number: senderId.replace('@s.whatsapp.net', ''),
             name: senderName, lastSeen: Date.now(),
-            language: botData.customers[senderId]?.language || 'roman_urdu'
+            language: prevCust.language || 'roman_urdu',
+            tag: prevCust.tag || 'new', tagManual: prevCust.tagManual || false,
+            followupNeeded: false, followupSentAt: prevCust.followupSentAt || 0,
+            totalSpent: prevCust.totalSpent || 0, orderCount: prevCust.orderCount || 0
         };
 
         // VOICE
@@ -1358,7 +1408,9 @@ async function handleMessage(sock, message) {
             }
             await sock.sendMessage(senderId, { text: getPaymentMessage(orderId, product, lang) });
         } else {
-            await sock.sendMessage(senderId, { text: aiReply.message }, { quoted: message });
+            await sendAIReply(sock, senderId, aiReply.message, lang, message);
+            const c2 = botData.customers[senderId];
+            if (c2) { c2.followupNeeded = true; c2.followupAt = Date.now() + 24 * 60 * 60 * 1000; await saveData(); }
         }
     } catch (err) {
         console.error('Handle error:', err.message);
@@ -1548,6 +1600,85 @@ setInterval(() => {
         console.log('\uD83E\uDDF9 Cleaned old sales histories');
     }
 }, 30 * 60 * 1000);
+
+// ─────────────────────────────────────────
+// FEATURE 7: AI voice replies (Edge TTS, Urdu)
+let _edgeTts = null;
+function getEdgeTts() {
+    if (!_edgeTts) { try { _edgeTts = require('edge-tts/out/index.js'); } catch (e) { console.log('edge-tts load fail:', e.message); } }
+    return _edgeTts;
+}
+const TTS_VOICES = { urdu: 'ur-PK-AsadNeural', roman_urdu: 'ur-PK-AsadNeural', english: 'en-US-AriaNeural' };
+async function textToVoice(text, lang) {
+    const lib = getEdgeTts();
+    if (!lib || !lib.tts) return null;
+    try {
+        const clean = String(text || '').replace(/[*_~`#]/g, '').substring(0, 600);
+        if (!clean.trim()) return null;
+        const voice = (botData.settings && botData.settings.ttsVoice) || TTS_VOICES[lang] || TTS_VOICES.roman_urdu;
+        const buf = await lib.tts(clean, { voice });
+        return buf && buf.length > 1000 ? buf : null;
+    } catch (e) { console.log('TTS fail:', e.message); return null; }
+}
+async function sendAIReply(sock, jid, text, lang, quoted) {
+    if (botData.settings && botData.settings.voiceReplies) {
+        const audio = await textToVoice(text, lang);
+        if (audio) {
+            await sock.sendMessage(jid, { audio, mimetype: 'audio/mpeg' }, quoted ? { quoted } : {});
+            return 'voice';
+        }
+    }
+    await sock.sendMessage(jid, { text }, quoted ? { quoted } : {});
+    return 'text';
+}
+
+// FEATURE 6: Customer tags (new / repeat / vip)
+function computeTag(jid) {
+    const c = (botData.customers || {})[jid];
+    if (!c || c.tagManual) return;
+    const orders = Object.values(botData.orders || {}).filter(o => o.customerJid === jid);
+    const approved = orders.filter(o => o.status === 'approved');
+    const spent = approved.reduce((sum, o) => {
+        const pr = (Array.isArray(botData.products) ? botData.products : []).find(x => x.id === o.productId);
+        return sum + ((pr && pr.price) || 0);
+    }, 0);
+    c.orderCount = orders.length;
+    c.totalSpent = spent;
+    if (approved.length >= 3 || spent >= 5000) c.tag = 'vip';
+    else if (orders.length >= 2) c.tag = 'repeat';
+    else c.tag = 'new';
+}
+
+// FEATURE 2: Abandoned follow-up — 24h baad AI reminder
+// ─────────────────────────────────────────
+async function checkAbandonedFollowups() {
+    try {
+        if (!sockGlobal || botStatus !== 'connected') return;
+        if (botData.settings.followupEnabled === false) return; // admin can disable
+        const now = Date.now();
+        for (const [jid, c] of Object.entries(botData.customers || {})) {
+            if (!c.followupNeeded || !c.followupAt || now < c.followupAt) continue;
+            if (jid.endsWith('@g.us') || jid.includes('newsletter')) continue;
+            c.followupNeeded = false;
+            c.followupSentAt = now;
+            try {
+                const lang = c.language || 'roman_urdu';
+                const prompt = 'Customer ne 24 ghante pehle baat ki thi phir gayab ho gaya. ' +
+                    'Ek pyara sa follow-up reminder likho (2 lines max). Naam: ' + (c.name || 'Dost') + '.';
+                const ai = await getAISalesResponse(prompt, jid, c.name || 'Dost', lang);
+                const msg = ai && ai.message ? ai.message : (lang === 'urdu'
+                    ? '\u0627\u0644\u0633\u0644\u0627\u0645 \u0639\u0644\u06cc\u06a9\u0645! \u06a9\u0644 \u0628\u0627\u062a \u06c1\u0648\u0626\u06cc \u062a\u06be\u06cc \u2014 \u06a9\u06cc\u0627 \u0622\u067e \u0627\u0628 \u0628\u06be\u06cc \u062f\u0644\u0686\u0633\u067e\u06cc \u0631\u06a9\u06be\u062a\u06d2 \u06c1\u06cc\u06ba? \uD83D\uDE0A'
+                    : lang === 'english'
+                    ? 'Hi! You asked about our themes yesterday \u2014 still interested? Let me know! \uD83D\uDE0A'
+                    : 'Assalam-o-Alaikum! Kal baat hui thi \u2014 kya ab bhi themes mein interested hain? Batayein! \uD83D\uDE0A');
+                await sockGlobal.sendMessage(jid, { text: '\u23F0 *Follow-up:*\n\n' + msg });
+                console.log('Follow-up bheja: ' + (c.number || jid));
+            } catch (e) { console.log('Followup send fail:', e.message); }
+        }
+        await saveData();
+    } catch (e) { console.log('Followup checker error:', e.message); }
+}
+setInterval(checkAbandonedFollowups, 30 * 60 * 1000); // har 30 min check
 
 process.on('SIGTERM', async () => {
     console.log('SIGTERM received \u2014 saving data and shutting down...');
