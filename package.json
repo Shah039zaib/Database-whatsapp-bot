@@ -1,6 +1,6 @@
 {
   "name": "mega-agency-bot",
-  "version": "2.0.0",
+  "version": "3.1.0",
   "description": "Mega Agency WhatsApp AI Sales Bot with Upstash",
   "main": "index.js",
   "scripts": {
@@ -12,6 +12,7 @@
     "dotenv": "^16.3.1",
     "form-data": "^4.0.0",
     "pino": "^8.17.0",
-    "qrcode": "^1.5.3"
+    "qrcode": "^1.5.3",
+    "edge-tts": "1.0.1"
   }
 }
