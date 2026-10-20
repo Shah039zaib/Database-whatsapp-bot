@@ -919,7 +919,7 @@ input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform
 .sidebar{width:60px;}.sidebar-logo p,.nav-item span:last-child{display:none;}
 .nav-item{justify-content:center;}.main{margin-left:60px;width:calc(100% - 60px);padding:15px;}.stats-grid{grid-template-columns:repeat(2,1fr);}
 }
-</style>
+.tagbadge{font-size:10px;padding:2px 8px;border-radius:10px;color:#fff;cursor:pointer;margin-left:6px;}.tag-new{background:#555;}.tag-repeat{background:#3498db;}.tag-vip{background:#f39c12;color:#000;}</style>
 </head>
 <body>
 <div class="sidebar">
@@ -1062,7 +1062,6 @@ input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform
 <div class="toast" id="toast">✅ Done!</div>
 
 <script>
-.tagbadge{font-size:10px;padding:2px 8px;border-radius:10px;color:#fff;cursor:pointer;margin-left:6px;}.tag-new{background:#555;}.tag-repeat{background:#3498db;}.tag-vip{background:#f39c12;color:#000;}
 async function cycleTag(jid,cur){const order=['new','repeat','vip'];const next=order[(order.indexOf(cur)+1)%3];await fetch('/api/customer-tag',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jid,tag:next})});loadData();}
 function setVal(id,v){var el=document.getElementById(id);if(el&&document.activeElement!==el)el.value=(v==null?'':v);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
