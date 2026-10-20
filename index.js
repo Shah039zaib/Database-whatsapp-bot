@@ -278,6 +278,18 @@ let botStatus = 'starting';
 let sockGlobal = null;
 const salesHistory = {};
 const sessions = {};
+const loginAttempts = {}; // ip -> {count, resetAt}: brute-force protection
+function loginAllowed(ip) {
+    const now = Date.now();
+    const rec = loginAttempts[ip];
+    if (!rec || now > rec.resetAt) { loginAttempts[ip] = { count: 0, resetAt: now + 60000 }; return true; }
+    return rec.count < 5;
+}
+function loginFailed(ip) {
+    const rec = loginAttempts[ip] || { count: 0, resetAt: Date.now() + 60000 };
+    rec.count++;
+    loginAttempts[ip] = rec;
+}
 let broadcastRunning = false;
 let broadcastCancelled = false;
 let existingChats = [];
@@ -286,6 +298,7 @@ let globalStore = null;
 let botRestartCount = 0;
 let lastQRTime = 0;  // Track last QR time to prevent excessive reloading
 let qrRetryCount = 0;  // Track consecutive QR attempts
+let qrGeneratedAt = 0;  // Timestamp of latest QR
 
 function isAuthenticated(req) {
     const cookies = req.headers.cookie || '';
@@ -513,18 +526,31 @@ const server = http.createServer(async (req, res) => {
     try {
         const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
         const pathname = parsedUrl.pathname;
-        const publicPaths = ['/login', '/qr'];
+        const publicPaths = ['/login', '/healthz'];
 
         // LOGIN
         if (pathname === '/login') {
             if (req.method === 'POST') {
+                const clientIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+                if (!loginAllowed(clientIp)) {
+                    res.writeHead(429, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, message: 'Too many attempts. 1 minute ruko.' }));
+                    return;
+                }
                 const body = await parseBody(req);
-                if (body.password === botData.settings.dashboardPassword) {
+                const expected = botData.settings.dashboardPassword || '';
+                const ok = body.password && expected &&
+                    body.password.length === expected.length &&
+                    crypto.timingSafeEqual(Buffer.from(body.password), Buffer.from(expected));
+                if (ok) {
+                    loginAttempts[clientIp] = { count: 0, resetAt: Date.now() + 60000 };
                     const sessionId = crypto.randomUUID();
                     sessions[sessionId] = { created: Date.now() };
-                    res.writeHead(200, { 'Set-Cookie': `session=${sessionId}; Path=/; HttpOnly; SameSite=Strict`, 'Content-Type': 'application/json' });
+                    const secureFlag = (req.headers['x-forwarded-proto'] === 'https' || req.socket.encrypted) ? '; Secure' : '';
+                    res.writeHead(200, { 'Set-Cookie': `session=${sessionId}; Path=/; HttpOnly; SameSite=Strict${secureFlag}`, 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ success: true }));
                 } else {
+                    loginFailed(clientIp);
                     res.writeHead(401, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ success: false, message: 'Wrong password!' }));
                 }
@@ -535,7 +561,14 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
-        // RESET QR — PUBLIC ENDPOINT
+        // AUTH CHECK
+        if (!publicPaths.includes(pathname) && !isAuthenticated(req)) {
+            res.writeHead(302, { Location: '/login' });
+            res.end();
+            return;
+        }
+
+        // RESET QR — AUTHENTICATED ONLY (was public: security fix)
         if (pathname === '/api/reset-qr' && req.method === 'POST') {
             console.log('🔄 QR Reset requested...');
             await clearAllAuth();
@@ -551,10 +584,23 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
-        // AUTH CHECK
-        if (!publicPaths.includes(pathname) && !isAuthenticated(req)) {
-            res.writeHead(302, { Location: '/login' });
-            res.end();
+
+        // HEALTH CHECK — public, no auth (Render + monitoring)
+        if (pathname === '/healthz') {
+            let redisOk = false;
+            try {
+                if (REDIS_URL && REDIS_TOKEN) {
+                    await axios.get(`${REDIS_URL}/ping`, {
+                        headers: { Authorization: `Bearer ${REDIS_TOKEN}` }, timeout: 5000
+                    });
+                    redisOk = true;
+                }
+            } catch (e) { redisOk = false; }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                status: 'ok', botStatus, chatsLoaded,
+                uptimeSec: Math.floor(process.uptime()), redisOk, version: '3.0.0'
+            }));
             return;
         }
 
@@ -574,7 +620,7 @@ const server = http.createServer(async (req, res) => {
             }
             try {
                 const qrDataURL = await QRCode.toDataURL(currentQR, { width: 300, margin: 2 });
-                res.end(`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="25"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;padding:20px;gap:10px;}h2{color:#25D366;}img{border:8px solid white;border-radius:12px;width:280px;height:280px;}.steps{background:#222;padding:15px;border-radius:10px;text-align:left;max-width:320px;}p{color:#aaa;}.btn-row{display:flex;gap:10px;justify-content:center;margin-top:5px;}.btn{padding:10px 20px;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;}</style></head><body><h2>📱 WhatsApp QR Code</h2><img src="${qrDataURL}"/><div class="steps"><p>1️⃣ WhatsApp kholo</p><p>2️⃣ 3 dots → Linked Devices</p><p>3️⃣ Link a Device</p><p>4️⃣ QR scan karo</p></div><p style="color:#f39c12;">⚠️ 25 sec mein expire — auto-refresh hoga</p><div class="btn-row"><button class="btn" style="background:#25D366;color:black;" onclick="location.reload()">🔄 Refresh</button><button class="btn" style="background:#e74c3c;color:white;" onclick="resetQr()">🗑️ Naya QR</button></div>${resetScript}</body></html>`);
+                res.end(`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="15"><style>body{background:#111;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;text-align:center;padding:20px;gap:10px;}h2{color:#25D366;}img{border:8px solid white;border-radius:12px;width:280px;height:280px;}.steps{background:#222;padding:15px;border-radius:10px;text-align:left;max-width:320px;}p{color:#aaa;}.btn-row{display:flex;gap:10px;justify-content:center;margin-top:5px;}.btn{padding:10px 20px;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;}</style></head><body><h2>📱 WhatsApp QR Code</h2><img src="${qrDataURL}"/><div class="steps"><p>1️⃣ WhatsApp kholo</p><p>2️⃣ 3 dots → Linked Devices</p><p>3️⃣ Link a Device</p><p>4️⃣ QR scan karo</p></div><p style="color:#f39c12;">⚠️ 15 sec mein refresh — auto-refresh hoga</p><div class="btn-row"><button class="btn" style="background:#25D366;color:black;" onclick="location.reload()">🔄 Refresh</button><button class="btn" style="background:#e74c3c;color:white;" onclick="resetQr()">🗑️ Naya QR</button></div>${resetScript}</body></html>`);
             } catch (err) { res.end('<h1 style="color:red">QR Error: ' + err.message + '</h1>'); }
             return;
         }
@@ -594,8 +640,17 @@ const server = http.createServer(async (req, res) => {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             const ordersArr = Object.values(botData.orders || {});
             const safeProducts = Array.isArray(botData.products) ? botData.products : [botData.products || {}];
+            const { dashboardPassword: _pw, ...safeSettings } = (botData.settings || {});
             res.end(JSON.stringify({
-                ...botData, botStatus, chatsLoaded, broadcastRunning,
+                settings: safeSettings,
+                payment: botData.payment,
+                products: botData.products,
+                aiPrompt: botData.aiPrompt,
+                broadcasts: botData.broadcasts,
+                orders: botData.orders,
+                customers: botData.customers,
+                orderCounter: botData.orderCounter,
+                botStatus, chatsLoaded, broadcastRunning,
                 stats: {
                     pending: ordersArr.filter(o => o.status === 'pending').length,
                     approved: ordersArr.filter(o => o.status === 'approved').length,
@@ -644,9 +699,15 @@ const server = http.createServer(async (req, res) => {
                 res.end(JSON.stringify({ success: false, error: 'Contacts select karo!' }));
                 return;
             }
+            const delaySeconds = Math.min(60, Math.max(1, parseInt(body.delaySeconds) || 5));
+            if (!sockGlobal || botStatus !== 'connected') {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'WhatsApp connected nahi \u2014 pehle QR scan karo!' }));
+                return;
+            }
             const bc = {
                 id: Date.now(), offerDetails: body.offerDetails || '', baseMessage: body.baseMessage || '',
-                personalized: body.personalized || false, delaySeconds: body.delaySeconds || 5,
+                personalized: body.personalized || false, delaySeconds,
                 selectedContacts: body.selectedContacts, status: 'pending', sentCount: 0, failedCount: 0,
                 totalContacts: body.selectedContacts.length, createdAt: Date.now()
             };
@@ -958,6 +1019,7 @@ input:checked+.slider{background:#25D366;}input:checked+.slider:before{transform
 <div class="toast" id="toast">✅ Done!</div>
 
 <script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 let allData={};let products=[];let allChats=[];let selectedChats=new Set();let filteredChats=[];
 
 async function loadData(){
@@ -995,7 +1057,7 @@ function orderCard(o){
     const bc=o.status==='pending'?'bp':o.status==='approved'?'ba':'br';
     const lb=o.language?'<span style="background:#333;padding:2px 8px;border-radius:10px;font-size:11px;color:#aaa;">'+o.language+'</span>':'';
     const acts=o.status==='pending'?\`<button class="btn btn-green" onclick="approveOrder(\${o.orderId})">✅ Approve</button><button class="btn btn-red" onclick="rejectOrder(\${o.orderId})">❌ Reject</button><button class="btn btn-blue" onclick="openMsg('\${o.customerJid}')">💬 Message</button>\`:\`<button class="btn btn-blue" onclick="openMsg('\${o.customerJid}')">💬 Message</button>\`;
-    return \`<div class="order-card \${o.status}"><div class="order-header"><span class="order-id">#\${o.orderId}</span><div style="display:flex;gap:6px;">\${lb}<span class="badge \${bc}">\${o.status.toUpperCase()}</span></div></div><div class="order-info">📱 Number: <b>\${o.customerNumber}</b><br>👤 Name: <b>\${o.customerName||'N/A'}</b><br>📸 Screenshot: <b>\${o.hasScreenshot?'✅ Received':'❌ Pending'}</b><br>📅 Time: <b>\${time}</b></div><div class="btn-row">\${acts}</div></div>\`;
+    return \`<div class="order-card \${o.status}"><div class="order-header"><span class="order-id">#\${o.orderId}</span><div style="display:flex;gap:6px;">\${lb}<span class="badge \${bc}">\${o.status.toUpperCase()}</span></div></div><div class="order-info">📱 Number: <b>\${o.customerNumber}</b><br>👤 Name: <b>\${esc(o.customerName||'N/A')}</b><br>📸 Screenshot: <b>\${o.hasScreenshot?'✅ Received':'❌ Pending'}</b><br>📅 Time: <b>\${time}</b></div><div class="btn-row">\${acts}</div></div>\`;
 }
 
 function renderOrders(){
@@ -1023,7 +1085,7 @@ function renderChats(){
     cs.style.display='none';
     cl.innerHTML=filteredChats.map(c=>\`<div class="chat-item \${selectedChats.has(c.jid)?'selected':''}" onclick="toggleChat('\${c.jid}')">
     <div class="chat-avatar">👤</div>
-    <div class="chat-info"><div class="chat-name">\${c.name||c.number}</div><div class="chat-number">\${c.number}</div></div>
+    <div class="chat-info"><div class="chat-name">\${esc(c.name||c.number)}</div><div class="chat-number">\${c.number}</div></div>
     <input type="checkbox" \${selectedChats.has(c.jid)?'checked':''} onclick="event.stopPropagation()"/>
     </div>\`).join('');
     updateSelCount();updateBcPreview();
@@ -1088,7 +1150,7 @@ function renderBcHistory(){
 function renderCustomers(){
     const cs=Object.values(allData.customers||{}).sort((a,b)=>b.lastSeen-a.lastSeen);
     const cc=document.getElementById('custCount');if(cc)cc.textContent=cs.length+' total';
-    document.getElementById('custList').innerHTML=cs.length===0?'<div class="empty">📭 Koi customer nahi abhi</div>':cs.map(c=>\`<div style="background:#0f0f0f;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid #222;display:flex;justify-content:space-between;align-items:center;"><div><p style="font-weight:bold;color:white;">\${c.name||'Unknown'}</p><p style="color:#aaa;font-size:12px;">\${c.number} • \${c.language||'?'} • \${new Date(c.lastSeen).toLocaleDateString('en-PK')}</p></div><button class="btn btn-blue" onclick="openMsg('\${c.jid}')">💬</button></div>\`).join('');
+    document.getElementById('custList').innerHTML=cs.length===0?'<div class="empty">📭 Koi customer nahi abhi</div>':cs.map(c=>\`<div style="background:#0f0f0f;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid #222;display:flex;justify-content:space-between;align-items:center;"><div><p style="font-weight:bold;color:white;">\${esc(c.name||'Unknown')}</p><p style="color:#aaa;font-size:12px;">\${c.number} • \${c.language||'?'} • \${new Date(c.lastSeen).toLocaleDateString('en-PK')}</p></div><button class="btn btn-blue" onclick="openMsg('\${c.jid}')">💬</button></div>\`).join('');
 }
 
 function renderProducts(){
@@ -1306,7 +1368,10 @@ async function handleMessage(sock, message) {
 // ─────────────────────────────────────────
 // WHATSAPP BOT — STRONG QR + REDIS AUTH
 // ─────────────────────────────────────────
+let botStarting = false; // mutex: never run startBot concurrently
 async function startBot() {
+    if (botStarting) { logBot(LOG_LEVEL.WARN, 'startBot already in progress \u2014 skipping duplicate'); return; }
+    botStarting = true;
     try {
         botRestartCount++;
         logBot(LOG_LEVEL.INFO, `Bot start attempt #${botRestartCount}`);
@@ -1339,7 +1404,7 @@ async function startBot() {
             emitOwnEvents: false,
             markOnlineOnConnect: false,
             generateHighQualityLinkPreview: false,
-            syncFullHistory: true,
+            syncFullHistory: process.env.SYNC_FULL_HISTORY === 'true', // default false: saves RAM on 512MB Render
             retryRequestDelayMs: 3000,       // Increased from 2s to 3s
             maxMsgRetryCount: 3,             // Reduced from 5 to 3
             fireInitQueries: true,
@@ -1368,12 +1433,13 @@ async function startBot() {
                 }
                 lastQRTime = now;
 
-                // Prevent QR spam - if too many attempts, log it but don't abort
+                // FIX: always show the LATEST QR (old code froze on stale QR after 3 rapid retries)
+                currentQR = qr;
+                botStatus = 'qr_ready';
+                qrGeneratedAt = Date.now();
                 if (qrRetryCount > 3) {
-                    logBot(LOG_LEVEL.WARN, `Multiple QR attempts (${qrRetryCount}) - Please scan the new QR`);
+                    logBot(LOG_LEVEL.WARN, `Multiple QR attempts (${qrRetryCount}) - showing latest QR`);
                 } else {
-                    currentQR = qr;
-                    botStatus = 'qr_ready';
                     logBot(LOG_LEVEL.DEBUG, `QR Ready! (attempt #${botRestartCount})`);
                 }
             }
@@ -1467,8 +1533,11 @@ async function startBot() {
         console.error(`Bot error (attempt #${botRestartCount}):`, err.message);
         botStatus = 'error';
         const delay = Math.min(10000 * botRestartCount, 60000);
+        botStarting = false; // release before scheduled retry
         setTimeout(startBot, delay);
+        return;
     }
+    botStarting = false; // release after successful setup
 }
 
 // Cleanup old salesHistory entries every 30 minutes
@@ -1480,8 +1549,27 @@ setInterval(() => {
     }
 }, 30 * 60 * 1000);
 
+process.on('SIGTERM', async () => {
+    console.log('SIGTERM received \u2014 saving data and shutting down...');
+    try { await saveData(); } catch (e) { console.log('Save on shutdown failed:', e.message); }
+    try { if (sockGlobal) { sockGlobal.end(); } } catch (e) { }
+    process.exit(0);
+});
+process.on('SIGINT', async () => {
+    try { await saveData(); } catch (e) { }
+    process.exit(0);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled rejection:', reason && reason.message ? reason.message : reason);
+});
+
 (async () => {
     console.log('\uD83D\uDE80 Mega Agency AI Sales Bot v6 \u2014 STARTING...');
     await loadData();
+    let fixedStuck = 0;
+    for (const b of (botData.broadcasts || [])) {
+        if (b.status === 'running') { b.status = 'interrupted'; fixedStuck++; }
+    }
+    if (fixedStuck > 0) { console.log('Cleaned ' + fixedStuck + ' stuck broadcast(s) -> interrupted'); await saveData(); }
     startBot();
 })();
